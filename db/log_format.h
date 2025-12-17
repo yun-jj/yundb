@@ -5,8 +5,7 @@
 
 namespace yundb
 {
-namespace log
-{
+
 constexpr size_t recordBlockSize = 32768; /* 32k */
 constexpr size_t recordHeadSize = 3; /*length(2byte), type(1byte) */
 
@@ -22,7 +21,6 @@ enum RecordType
 };
 constexpr size_t maxRecordType = LastType;
 
-}
 }
 
 #endif

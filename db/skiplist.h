@@ -2,67 +2,31 @@
 #define SKIP_LIST_H
 
 #include <memory>
-#include <iostream>
 #include <atomic>
 #include <string>
 
 #include "util/random.h"
 #include "util/arena.h"
+#include "util/error_print.h"
+#include "yundb/options.h"
+#include "yundb/comparator.h"
 
 namespace yundb
 {
-namespace skiplist
-{
 
+class MemTable;
 /* Skiplist max height */
 static constexpr int MaxHeight = 12;
-
-/* skiplist node in memory */
-template <typename KeyType, class Comparator>
-class SkipList<KeyType, Comparator>::Node
-{
- public:
-  Node() = default;
-  Node(Node& other) = delete;
-  Node& operator=(Node& other) = delete;
-  Node(const KeyType& key) : _key(key){}
-  Node* getNext(int level)
-  {
-    if (level < 0) std::cerr << "level is negative\n";
-    return _next[level].load(std::memory_order_acquire);
-  }
-  Node* noBarrierGetNext(int level)
-  {
-    if (level < 0) std::cerr << "level is negative\n";
-    return _next[level].load(std::memory_order_relaxed);
-  }
-  void setNext(int level, Node* next)
-  {
-    if (level < 0) std::cerr << "level is negative\n";
-    _next[level].store(next, std::memory_order_release);
-  }
-  void noBarrierSetNext(int level, Node* next)
-  {
-    if (level < 0) std::cerr << "level is negative\n";
-    _next[level].store(next, std::memory_order_relaxed);
-  }
-  KeyType getKey() const
-  {return _key;}
- private:
-  const KeyType _key;
-  /* Cur node next node _next[0] is level 0 */
-  std::atomic<Node*> _next[1];
-};
-
-
-template <typename KeyType, class Comparator>
+/* InternalComparator must define int operator() */
+template <typename KeyType, typename InternalComparator>
 class SkipList
 {
  private:
   class Node;
+  friend class MemTable;
  public:
-  SkipList() = default;
-  SkipList(std::shared_ptr<yundb::Arena> arena, Comparator comparator);
+  SkipList() = delete;
+  SkipList(std::shared_ptr<yundb::Arena> arena, const Options& options);
   SkipList(SkipList& other) = delete;
   ~SkipList() = default;
   SkipList& operator=(SkipList& other) = delete;
@@ -73,20 +37,21 @@ class SkipList
  private:
   /* memory pool */
   std::shared_ptr<yundb::Arena> _arena;
-  const Comparator _comparator;
+  InternalComparator _comparator;
   yundb::Random _rand;
   std::atomic<int> _max_height;
-  /* Node list head, head value is infinitesimal number */
+  /* Node list head, head value is a infinitesimal number */
   Node* const _head;
   /* Create a new node */
   Node* newNode(int height, const KeyType& key)
   {
       char* const node = _arena->allocateAligned(
       sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
-      return new (node) Node<KeyType>(key);
+      return new (node) Node(key);
   }
-  void findNoLessThanNodePre(Node* pre[], const KeyType& key);
-  bool checkDuplicates(Node* pre[], const KeyType& key) const;
+  Node* getFirstNode() const
+  {return _head->getNext(0);}
+  void findNoLessThanNodePre(Node* pre[], const KeyType& key) const;
   int randomHeight();
   void doInsert(Node* pre[], const KeyType& key);
   int getMaxHeight() const
@@ -95,35 +60,76 @@ class SkipList
   {_max_height.fetch_add(h, std::memory_order_relaxed);}
 };
 
-template <typename KeyType, class Comparator>
-SkipList<KeyType, Comparator>::SkipList(std::shared_ptr<yundb::Arena> arena, Comparator comparator)
+/* skiplist node in memory */
+template <typename KeyType, typename InternalComparator>
+class SkipList<KeyType, InternalComparator>::Node
+{
+ public:
+  Node() = default;
+  Node(Node& other) = delete;
+  Node& operator=(Node& other) = delete;
+  Node(const KeyType& key) : _key(key){}
+  Node* getNext(int level) const
+  {
+    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    return _next[level].load(std::memory_order_acquire);
+  }
+  Node* noBarrierGetNext(int level) const
+  {
+    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    return _next[level].load(std::memory_order_relaxed);
+  }
+  void setNext(int level, Node* next)
+  {
+    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    _next[level].store(next, std::memory_order_release);
+  }
+  void noBarrierSetNext(int level, Node* next)
+  {
+    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    _next[level].store(next, std::memory_order_relaxed);
+  }
+  KeyType getKey() const
+  {return _key;}
+ private:
+  const KeyType _key;
+  /* Cur node next node _next[0] is level 0 */
+  std::atomic<Node*> _next[1];
+};
+
+template <typename KeyType, typename InternalComparator>
+SkipList<KeyType, InternalComparator>::SkipList(
+      std::shared_ptr<yundb::Arena> arena,
+      const Options& options
+)
     : _arena(arena),
-     _comparator(comparator),
-     _rand(0xdeadbeef),
-     _max_height(1),
-     _head(newNode(MaxHeight, 0)) 
+      _comparator(options),
+      _rand(0xdeadbeef),
+      _max_height(1),
+      _head(newNode(MaxHeight, 0)) 
 {
   for (int i = 0; i < MaxHeight; i++)
     _head->setNext(i, nullptr);
 }
 
 /* Before insert choice the node insert height */
-template <typename KeyType, class Comparator>
-int SkipList<KeyType, Comparator>::randomHeight()
+template <typename KeyType, typename InternalComparator>
+int SkipList<KeyType, InternalComparator>::randomHeight()
 {
   constexpr int Brancing = 4;
   int height = 1;
   /* 1/Brancing chance insert */
   while (_rand.OneIn(Brancing) && height < MaxHeight)
     height++;
-  if (height > MaxHeight) std::cerr << "height over than MaxHeight\n";
+  CERR_PRINT_WITH_CONDITIONAL("height over than MaxHeight",
+                               height > MaxHeight);
   return height;
 }
 
 /* Find the node pre that no less than key  */
-template <typename KeyType, class Comparator>
-void SkipList<KeyType, Comparator>::findNoLessThanNodePre(
-    Node* pre[], const KeyType& key)
+template <typename KeyType, typename InternalComparator>
+void SkipList<KeyType, InternalComparator>::findNoLessThanNodePre(
+    Node* pre[], const KeyType& key) const
 {
   Node* cur = _head;
   int level = getMaxHeight() - 1;
@@ -138,21 +144,20 @@ void SkipList<KeyType, Comparator>::findNoLessThanNodePre(
       continue;
     }
     int rs = _comparator(key, next->getKey());
-    if (rs == 0)
+
+    if (rs > 0) cur = next;
+    else if (rs < 0)
     {
       pre[level] = cur;
-      return;
+      level -= 1;
     }
-    else if (rs > 0) cur = next;
-    else if (rs < 0) level -= 1;
   }
 }
 
 /* Do the actually insert */
-template <typename KeyType, class Comparator>
-void SkipList<KeyType, Comparator>::doInsert(Node* pre[], const KeyType& key)
+template <typename KeyType, typename InternalComparator>
+void SkipList<KeyType, InternalComparator>::doInsert(Node* pre[], const KeyType& key)
 {
-  constexpr int Branching = 4;
   Node* node = newNode(MaxHeight, key);
 
   int height = randomHeight();
@@ -171,57 +176,20 @@ void SkipList<KeyType, Comparator>::doInsert(Node* pre[], const KeyType& key)
   }
 }
 
-template <typename KeyType, class Comparator>
-void SkipList<KeyType, Comparator>::insert(const KeyType& key)
+template <typename KeyType, typename InternalComparator>
+void SkipList<KeyType, InternalComparator>::insert(const KeyType& key)
 {
   Node* pre[MaxHeight] = {nullptr};
   findNoLessThanNodePre(pre, key);
-
-  /* Ensure key not duplicate */
-  if (checkDuplicates(pre, key))
-  {
-    std::cerr << "Skiplist: duplicate insert\n";
-    return;
-  } 
   doInsert(pre, key);
 }
 
-template <typename KeyType, class Comparator>
-KeyType SkipList<KeyType, Comparator>::contains(const KeyType& key)
+template <typename KeyType, typename InternalComparator>
+KeyType SkipList<KeyType, InternalComparator>::contains(const KeyType& key)
 {
-  Node* cur = _head;
-  int level = getMaxHeight() - 1;
-  
-  while (level >= 0)
-  {
-    Node* next = cur->getNext(level);
-    if (next == nullptr)
-    {
-      level -= 1;
-      continue; 
-    }
-    int rs = _comparator(key, next->getKey());
-    if (rs == 0) return next->getKey();
-    else if (rs > 0) cur = next; 
-    else if (rs < 0) level -= 1;
-  }
-  return KeyType();
-}
-
-template <typename KeyType, class Comparator>
-bool SkipList<KeyType, Comparator>::checkDuplicates(
-    Node* pre[], const KeyType& key) const
-{
-  for (int i = 0; MaxHeight > i; i++)
-  {
-    if (pre[i] != nullptr)
-      if (_comparator(key, pre[i]->getKey()) == 0)
-        return true;
-  }
-
-  return false;
-}
-
+  Node* pre[MaxHeight] = {nullptr};
+  findNoLessThanNodePre(pre, key);
+  return pre[0]->getKey();
 }
 
 }

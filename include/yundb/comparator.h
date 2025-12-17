@@ -15,11 +15,10 @@ class Comparator
   //   < 0 iff "a" < "b",
   //   == 0 iff "a" == "b",
   //   > 0 iff "a" > "b"
-  virtual int operator()(const Slice& key1, const Slice& key2) = 0;
- private:
+  virtual int cmp(const Slice& key1, const Slice& key2) const = 0;
 };
 
-Comparator* getBytewiseComparator();
+Comparator* BytewiseCmp();
 
 }
 

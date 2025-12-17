@@ -4,8 +4,6 @@
 
 namespace yundb
 {
-namespace log
-{
 
 void Writer::appendRecord(const Slice& record)
 {
@@ -59,5 +57,4 @@ void Writer::appendRecord(const Slice& record)
   }
 }
 
-}
 }

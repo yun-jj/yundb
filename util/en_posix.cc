@@ -1,24 +1,34 @@
 #include <unistd.h>
-#include <iostream>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mman.h>
 #include <fcntl.h>
+#include <string.h>
 
+#include "util/error_print.h"
 #include "yundb/en.h"
+#include "yundb/options.h"
 
 namespace yundb
 {
 
 constexpr size_t PosixWritableBufferSize =  65536;
 
-class WritablePosixFile final : public env::WritableFile
+Env* Env::Default()
+{
+  return nullptr;
+}
+
+class WritablePosixFile final : public WritableFile
 {
  public:
   WritablePosixFile(int fd, std::string filename)
-    : _fd(fd), _filename(std::move(filename)) {}
+    : _fd(fd), _filename(filename) {}
 
   ~WritablePosixFile() override {close();}
 
+  // Append data to buf
+  // when buf is full then flush buf data to os
   void append(const Slice& data)
   {
     const char* data_pointer = data.data();
@@ -44,8 +54,10 @@ class WritablePosixFile final : public env::WritableFile
     writeUnbuffer(data_pointer, write_size);
   }
 
+  // flush buf data to os
   void flush() override {writeUnbuffer(_buf, _pos);}
 
+  // close file
   void close() override
   {
     if (_fd > 0)
@@ -57,6 +69,7 @@ class WritablePosixFile final : public env::WritableFile
     }
   }
 
+  // Flush data to os and sysnc these data
   void sync() override
   {
     writeUnbuffer(_buf, _pos);
@@ -87,22 +100,92 @@ class WritablePosixFile final : public env::WritableFile
     }
   }
 
-  void flushBuffer()
-  {
-    writeUnbuffer(_buf, _pos);    
-    _pos = 0;
-  }
-
   int _fd;
   size_t _pos;
   const std::string _filename;
   char _buf[PosixWritableBufferSize];
 };
 
-
-void newWritableFile(std::string& file_name, env::WritableFile** result)
+class RandomAccessPosixFile final : public RandomAccessFile 
 {
- int fd = ::open(file_name.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
+ public:
+  RandomAccessPosixFile(int fd, std::string fileName) 
+        : _fd(fd),
+          _file_name(fileName)
+  {
+
+    struct stat fileStat;
+
+    if (::fstat(_fd, &fileStat) == -1)
+    {
+      CERR_PRINT("RandomAccessPosixFile: fstat error");
+      ::close(_fd);
+    }
+
+    _file_size = fileStat.st_size;
+
+    _data = static_cast<char*>(
+      ::mmap(
+        nullptr,
+        _file_size,
+        PROT_READ,
+        MAP_PRIVATE,
+        fd, 0
+      ));
+      
+    if (_data == MAP_FAILED)
+    {
+      CERR_PRINT("RandomAccessPosixFile: mmap error");
+      ::close(_fd);
+    }
+  }
+
+  ~RandomAccessPosixFile(){close();}
+
+  bool read(uint64_t offset, Slice* str, uint64_t bytes) override
+  {
+    if (str == nullptr)
+    {
+      CERR_PRINT("RandomAccessPosixFile: None str");
+      return false;
+    }
+
+    if (str->size() < bytes)
+    {
+      CERR_PRINT("RandomAccessPosixFile: dst space too short to fill");
+      return false;
+    }
+
+    char* dst = const_cast<char*>(str->data());
+    if (std::strncpy(dst, _data + offset, static_cast<size_t>(bytes)) != 0)
+    {
+      CERR_PRINT("RandomAccessPosixFile: copy error");
+      return false;
+    }
+
+    return true;
+  }
+
+  size_t fileSize() const
+  {return _file_size;}
+
+  void close()
+  {
+    char* tmp = const_cast<char*>(_data);
+    ::munmap(reinterpret_cast<void*>(tmp), _file_size);
+    ::close(_fd);
+  }
+
+ private:
+  std::string _file_name;
+  size_t _file_size;
+  int _fd;
+  const char* _data;
+};
+
+void newWritableFile(std::string& file_name, WritableFile** result)
+{
+  int fd = ::open(file_name.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
   if (fd < 0)
   {
     *result = nullptr;
@@ -111,6 +194,20 @@ void newWritableFile(std::string& file_name, env::WritableFile** result)
 
   *result = new WritablePosixFile(fd, file_name);
   return; 
+}
+
+void newRandomAccessFile(std::string& file_name, RandomAccessFile** result)
+{
+  int fd = ::open(file_name.c_str(), O_RDONLY);
+
+  if (fd < 0)
+  {
+    *result = nullptr;
+    return;
+  }
+
+  *result = new RandomAccessPosixFile(fd, file_name);
+  return;
 }
 
 }

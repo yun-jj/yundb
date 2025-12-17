@@ -11,8 +11,6 @@
 
 namespace yundb
 {
-namespace env
-{
 
 /* Sequentia read a file */
 class SequentialFile
@@ -52,9 +50,23 @@ class WritableFile
   virtual void sync() = 0;
 };
 
-}
+class Env
+{
+ public:
+  Env();
 
-void newWritableFile(std::string& file_name, env::WritableFile** result);
+  Env(const Env& other) = delete;
+  Env& operator=(const Env& other) = delete;
+
+  virtual ~Env();
+
+  static Env* Default();
+};
+
+
+void newWritableFile(std::string& file_name, WritableFile** result);
+
+void newRandomAccessFile(std::string& file_name, RandomAccessFile** result);
 
 }
 

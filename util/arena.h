@@ -17,6 +17,7 @@ class Arena
   Arena& operator=(Arena& other) = delete;
   char* allocate(size_t bytes);
   char* allocateAligned(size_t bytes);
+  size_t getMemoryUsage();
  private:
   char* allocateNewBlock(size_t bytes);
   std::vector<char*> _block;
