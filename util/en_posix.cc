@@ -19,6 +19,10 @@ Env* Env::Default()
   return nullptr;
 }
 
+namespace
+{
+
+
 class WritablePosixFile final : public WritableFile
 {
  public:
@@ -46,7 +50,7 @@ class WritablePosixFile final : public WritableFile
     _pos = 0;
     if (write_size < PosixWritableBufferSize)
     {
-      ::memcpy((_buf + _pos), data_pointer, write_size);
+      ::memcpy(_buf, data_pointer, write_size);
       _pos = write_size;
       return;
     }
@@ -166,7 +170,7 @@ class RandomAccessPosixFile final : public RandomAccessFile
     return true;
   }
 
-  size_t fileSize() const
+  size_t fileSize() const override
   {return _file_size;}
 
   void close()
@@ -182,6 +186,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
   int _fd;
   const char* _data;
 };
+
+}
 
 void newWritableFile(std::string& file_name, WritableFile** result)
 {

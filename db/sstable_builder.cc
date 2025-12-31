@@ -31,16 +31,7 @@ SstableBuilder::SstableBuilder(Options& options, WritableFile* file)
 
 SstableBuilder::~SstableBuilder() {}
 
-std::string SstableBuilder::writeIndexBlock()
-{
-  auto oldBlockPos = _cur_block_position;
-  auto block = _index_block_builder.finish(); 
-  writeRawBlock(block, NoCompression);
-  return _handle_builder.encode(oldBlockPos, block.size());
-}
-
-
-size_t SstableBuilder::writeBlock(const DataBlockBuilder& block)
+size_t SstableBuilder::writeBlock(std::string& block)
 {
   auto type = _options.compression;
   std::string compressionBlock;
@@ -50,17 +41,17 @@ size_t SstableBuilder::writeBlock(const DataBlockBuilder& block)
   {
   case NoCompression:
   {
-    writeData= block.getData();
+    writeData = block;
     break;
   }
   case SnappyCompression:
   {
-    if (Snappy_Compress(block.getData().data(), block.getSize(), &compressionBlock) && 
-        compressionBlock.size() < block.getSize() - (block.getSize() / 8u))
+    if (Snappy_Compress(block.data(), block.size(), &compressionBlock) && 
+        compressionBlock.size() < block.size() - (block.size() / 8u))
       writeData = compressionBlock; 
     else
     {
-      writeData = block.getData();
+      writeData = block;
       type = NoCompression;
     }
     break;
@@ -76,15 +67,28 @@ void SstableBuilder::writeRawBlock(const Slice& block, CompressionType type)
   // Write blcok
   _file->append(block);
   // Init trailer
-  char trailer[kBlockTrailerSize];
+  char trailer[BlockTrailerSize];
   trailer[0] = type;
   uint32_t crc = crc32c::Value(block.data(), block.size());
   crc = crc32c::Extend(crc, trailer, 1);
   EncodeFixed32(trailer + 1, crc32c::Mask(crc));
   // Write trailer
-  _file->append(Slice(trailer, kBlockTrailerSize));
+  _file->append(Slice(trailer, BlockTrailerSize));
   // Update position
-  _cur_block_position += block.size() + kBlockTrailerSize;
+  _cur_block_position += block.size() + BlockTrailerSize;
+}
+
+void SstableBuilder::flushBlock()
+{
+  // Put restart_ptrs
+  std::string block = _data_block_builder.finish();
+  auto oldBlockPos = _cur_block_position;
+  auto writeSize = writeBlock(block);
+  // Put index entry = | data block max key | position && data block size | 
+  _index_block_builder.put(_data_block_builder.getLastKey(),
+                           _handle_builder.encode(oldBlockPos, writeSize)); 
+  // Generate filter
+  _filter_block_builder.generateFilter();
 }
 
 void SstableBuilder::build(const MemTable* memtable)
@@ -95,47 +99,39 @@ void SstableBuilder::build(const MemTable* memtable)
   {
     // Trying put key and value
     if (_data_block_builder.assumeBlockSize(iter.getKey(), iter.getValue()) >=
-        _options.block_size) 
-    {
-      // Put restart_ptrs
-      _data_block_builder.finish();
-      auto oldBlockPos = _cur_block_position;
-      auto writeSize = writeBlock(_data_block_builder);
-      // Put index entry = | data block max key | position && data block size | 
-      _index_block_builder.put(_data_block_builder.getLastKey(),
-                           _handle_builder.encode(oldBlockPos, writeSize)); 
-      // Generate filter
-      _filter_block_builder.generateFilter();
+        _options.block_size) {
+      flushBlock();
     }
     // Put key value pair
     _data_block_builder.put(iter.getKey(), iter.getValue());
     _filter_block_builder.addKey(iter.getKey());
     iter++;
   }
+  
+  if (_data_block_builder.getSize() != 0)
+    flushBlock();
 
   // Write filter block
   size_t oldBlockPos = _cur_block_position;
-  Slice writeBlock = _filter_block_builder.finish();
-  writeRawBlock(writeBlock, NoCompression);
-  std::string filterHandle = _handle_builder.encode(oldBlockPos, writeBlock.size());
+  Slice filterBlock = _filter_block_builder.finish();
+  writeRawBlock(filterBlock, NoCompression);
+  std::string filterHandle = _handle_builder.encode(oldBlockPos, filterBlock.size());
 
   // Write meta index block
   oldBlockPos = _cur_block_position;
   writeRawBlock(filterHandle, NoCompression);
-  std::string metaIndexhandle = _handle_builder.encode(oldBlockPos, filterHandle.size());
+  std::string metaIndexHandle = _handle_builder.encode(oldBlockPos, filterHandle.size());
 
   // Write index block
   oldBlockPos = _cur_block_position;
-  writeBlock = _index_block_builder.finish();
-  writeRawBlock(writeBlock, NoCompression);
-  std::string indexBlockHandle = _handle_builder.encode(oldBlockPos, writeBlock.size());
+  std::string indexBlock = _index_block_builder.finish();
+  writeRawBlock(indexBlock, NoCompression);
+  std::string indexBlockHandle = _handle_builder.encode(oldBlockPos, indexBlock.size());
 
   // Write footer
   Footer footer;
   std::string footerBlock;
-  footer.setMetaIndexBlockHandle(metaIndexhandle);
-  footer.setIndexBlockHandle(indexBlockHandle);
-  footer.encodeTo(&footerBlock);
+  footer.encodeTo(&footerBlock, metaIndexHandle, indexBlockHandle);
   writeRawBlock(footerBlock, NoCompression);
 }
 

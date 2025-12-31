@@ -22,11 +22,12 @@ constexpr ValueType MaxValueType = TypeValue;
 
 constexpr ValueType TypeForSeek = TypeValue;
 
-/* Format: sequence 7B type 1B */
+// Format: sequence 7B type 1B 
 constexpr int KeyTagSize = 8;
 
 // 1-byte type + 32-bit crc
-constexpr int kBlockTrailerSize = 5;
+constexpr int BlockTrailerSize = 5;
+
 
 uint64_t packSeqAndType(SequenceNumber seq, ValueType type);
 /* Data pointer start adress 

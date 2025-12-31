@@ -19,6 +19,8 @@ enum FileType
 
 std::string generateFileName(uint64_t number, const std::string& dbName, const char* suffix);
 
+// Parse the file name and return true if the file type is a member of the FileType collection;
+// Otherwise, return false.
 bool parseFileName(const std::string fileName, uint64_t* number, FileType* fileType);
 
 std::string generateLogFileName(uint64_t number, const std::string& dbName);

@@ -6,25 +6,56 @@ namespace yundb
 InternalComparator::InternalComparator(const Options& options)
       : _options(options){}
 
+// Decode format | key | seq, type |
+static Slice decodeKey(const Slice& entry)
+{
+  CERR_PRINT_WITH_CONDITIONAL(
+    "DecodeKey: entry is null",
+    entry.data() == nullptr
+  );
+
+  const char* keyEntry = entry.data();
+  uint64_t keyLen;
+  keyEntry = GetVarint64Ptr(keyEntry, keyEntry + 10, &keyLen);
+  return Slice(keyEntry, keyLen + KeyTagSize);
+}
+
+// Decode format | value |
+static Slice decodeValue(const Slice& entry)
+{
+  CERR_PRINT_WITH_CONDITIONAL(
+    "DecodeValue: entry is null",
+    entry.data() == nullptr
+  );
+
+  const char* valueEntry = entry.data() + entry.size();
+  uint64_t valueLen;
+  GetVarint64Ptr(valueEntry, valueEntry + 10, &valueLen);
+  return Slice(valueEntry + VarintLength(valueLen), valueLen);
+}
+
 int InternalComparator::operator()(const Slice& key1, const Slice& key2) const
 {
-  uint64_t key1Len, key2Len;
-  const char* key1Ptr = key1.data();
-  const char* key2Ptr = key2.data();
 
-  key1Ptr = GetVarint64Ptr(key1Ptr, key1Ptr + 10, &key1Len);
-  key2Ptr = GetVarint64Ptr(key2Ptr, key2Ptr + 10, &key2Len);
+  Slice decodedKey1 = decodeKey(key1);
+  Slice decodedKey2 = decodeKey(key2);
+
+  size_t decodedKey1Len = decodedKey1.size(), decodedKey2Len = decodedKey2.size();
 
   // Cmp user key
-  Slice userKey1(key1Ptr, key1Len), userKey2(key2Ptr, key2Len);
-  int rs = _options.comparator->cmp(userKey1, userKey2);
+  int rs = _options.comparator->cmp(
+    Slice(decodedKey1.data(), decodedKey1Len - KeyTagSize),
+    Slice(decodedKey2.data(), decodedKey2Len - KeyTagSize)
+  );
 
   // Cmp seq
   if (rs == 0)
   {
     SequenceNumber key1Seq, key2Seq;
-    decodeSeqAndType(key1Ptr + key1Len, &key1Seq, nullptr);
-    decodeSeqAndType(key2Ptr + key2Len, &key2Seq, nullptr);
+    decodeSeqAndType(decodedKey1.data() + decodedKey1Len - KeyTagSize, 
+                     &key1Seq, nullptr);
+    decodeSeqAndType(decodedKey2.data() + decodedKey2Len - KeyTagSize,
+                     &key2Seq, nullptr);
 
     if (key1Seq > key2Seq) rs = +1;
     else if (key1Seq < key2Seq) rs = -1;
@@ -33,17 +64,28 @@ int InternalComparator::operator()(const Slice& key1, const Slice& key2) const
   return rs;
 }
 
-static Slice getValue(Slice entry)
+// Format is | key | seq, type |
+Slice MemTable::Iter::getKey()
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "getValue: entry is null",
-    entry.data() == nullptr
-  );
+  if (_cur != nullptr)
+  {
+    Slice entry = _cur->getKey();
+    return decodeKey(entry);
+  }
 
-  const char* valueEntry = entry.data() + entry.size();
-  uint32_t valueLen;
-  GetVarint32Ptr(valueEntry, valueEntry + 5, &valueLen);
-  return Slice(valueEntry + VarintLength(valueLen), valueLen);
+  return Slice("");
+}
+
+// Format is | value |
+Slice MemTable::Iter::getValue()
+{
+  if (_cur != nullptr)
+  {
+    Slice entry = _cur->getKey();
+    return decodeValue(entry);
+  }
+
+  return Slice("");
 }
 
 // The Node data format is | VarintKeySize | key | seq, type | VarintValueSize | Value |
@@ -89,20 +131,23 @@ bool MemTable::get(LookUpKey& key, std::string* value, bool& found)
 
   if (result.empty()) return false;
 
-  const char* KeyStart = result.data();
-  uint64_t keyLen;
-  const char* userKeyStart = GetVarint64Ptr(KeyStart, KeyStart + 10, &keyLen);
-  if (_options.comparator->cmp(Slice(userKeyStart, keyLen), key.getUserKey()))
+  Slice decodedKey = decodeKey(result);
+  size_t decodedKeyLen = decodedKey.size();
+
+  if (_options.comparator->cmp(
+    Slice(decodedKey.data(), decodedKeyLen - KeyTagSize),
+    key.getUserKey())){
     return false;
+  }
   
-  uint64_t tag = DecodeFixed64(userKeyStart + keyLen);
-  ValueType t = static_cast<ValueType>(tag & 0xff);
+  ValueType t;
+  decodeSeqAndType(decodedKey.data() + decodedKeyLen - KeyTagSize, nullptr, &t);
 
   switch (t)
   {
     case TypeForSeek:
     {
-      Slice v = getValue(result);
+      Slice v = decodeValue(result);
       value->assign(v.data(),v.size());
       break;
     }

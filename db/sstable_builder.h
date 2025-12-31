@@ -21,12 +21,12 @@ class SstableBuilder
   // Builde sstable
   void build(const MemTable* memtable);
  private:
-  std::string writeIndexBlock();
-  size_t writeBlock(const DataBlockBuilder& block);
+  size_t writeBlock(std::string& block);
   void writeRawBlock(const Slice& block, CompressionType type);
+  void flushBlock();
   uint64_t _cur_block_position;
   Options _options;
-  WritableFile* _file;
+  std::unique_ptr<WritableFile> _file;
   BlockHandle _handle_builder;
   FilterBlockBuilder _filter_block_builder;
   DataBlockBuilder _data_block_builder;

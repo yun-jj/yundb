@@ -39,6 +39,8 @@ class Slice
   const char* end() const {return data() + size();}
   bool empty() const {return (_size == 0);}
 
+  std::string toString() const {return std::string(_str, _size);}
+
   bool start_with(const Slice& startStr) const
   {
      if (_size < startStr.size()) return false;

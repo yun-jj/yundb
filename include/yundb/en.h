@@ -32,6 +32,7 @@ class RandomAccessFile
   RandomAccessFile(const RandomAccessFile& other) = delete;
   RandomAccessFile& operator=(const RandomAccessFile& other) = delete;
   virtual ~RandomAccessFile() = default;
+  virtual size_t fileSize() const = 0;
   virtual bool read(uint64_t offset, Slice* str, uint64_t bytes) = 0;
 };
 

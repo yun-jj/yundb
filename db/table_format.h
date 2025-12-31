@@ -43,8 +43,8 @@ class BlockHandle
   }
   // Encode position and size to dst
   std::string encode(uint64_t position, uint64_t size) const;
-  // Decode position and size
-  void decodeFrom(Slice* input);
+  // Decode position, size and return end of entry
+  const char* decodeFrom(const char* data);
 
  private:
   uint64_t _position;
@@ -58,20 +58,18 @@ class Footer
   // Max footer Size
   enum {MaxFooterSize = BlockHandle::kMaxEncodedLength * 2 + 8};
 
+  Footer(const Slice& footerBlock);
   Footer(){}
   ~Footer(){}
 
-  void setMetaIndexBlockHandle(std::string handle)
-  {_mete_index_block_handle = handle;}
-
-  void setIndexBlockHandle(std::string handle)
-  {_index_block_handle = handle;}
-
-  void encodeTo(std::string* input);
+  void encodeTo(std::string* input, const std::string& metaIndexHandle,
+                const std::string& indexBlockHandle);
+  inline void getMetaIndexPosAndSize(uint64_t* pos, uint64_t* size);
+  inline void getIndexBlockPosAndSize(uint64_t* pos, uint64_t* size);
 
  private:
-  std::string _mete_index_block_handle;
-  std::string _index_block_handle;
+  BlockHandle _metaIndexHandle;
+  BlockHandle _indexBlockHandle;
 };
 
 

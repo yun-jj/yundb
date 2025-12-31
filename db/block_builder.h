@@ -24,7 +24,9 @@ class DataBlockBuilder
   void put(const Slice& key, const Slice& value);
   // Assume put the key and value after current blcok size 
   size_t assumeBlockSize(const Slice& key, const Slice& value) const;
-  Slice finish();
+  // Append restart ptr and return the block
+  // this function will clear the space for new blcok
+  std::string finish();
   // Get all data in DataBlockBuilder
   Slice getData() const
   {return Slice(_data);}
@@ -41,12 +43,10 @@ class DataBlockBuilder
     return _last_Key;
   }
   void changeOptions(const Options& options)
-  {_restart_interval = options.block_restart_interval;}
+  {_options = options;}
   private:
-
+  Options _options;
   int _count;
-  int _restart_interval;
-  size_t _block_position;
   std::string _head_Key;
   std::string _last_Key;
   std::string _data;

@@ -32,7 +32,7 @@ TEST_F(SstableBuilderTest, sstableGenerate)
 {
   yundb::SequenceNumber seq;
 
-  while (memTable->getKvSize() <= options.write_buffer_size)
+  while (memTable->getMemoryUsage() <= options.write_buffer_size)
   {
     memTable->add(seq , yundb::ValueType::TypeValue,
                   generater.getRandString(), generater.getRandString());

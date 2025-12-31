@@ -57,11 +57,9 @@ class Iter
   bool empty()
   {return (_cur == nullptr);}
 
-  Slice getKey()
-  {return _cur->getKey();}
+  Slice getKey();
 
-  Slice getValue()
-  {return _cur->getKey();}
+  Slice getValue();
 
  private:
   const typename SkipList<Slice, InternalComparator>::Node* _cur;
@@ -98,7 +96,6 @@ class Iter
     _ref.fetch_sub(1, std::memory_order_relaxed);
     return _ref.load(std::memory_order_relaxed);
   }
-
   // Get the level 0 iter
   Iter iter() const
   {return Iter(&_skiplist);}
@@ -106,6 +103,8 @@ class Iter
   {return _kv_count.load(std::memory_order_relaxed);}
   size_t getKvSize() const
   {return _kv_size.load(std::memory_order_relaxed);}
+  size_t getMemoryUsage()
+  {return _arena->getMemoryUsage();}
  private:
   // Update kv_count and kv_size
   void countData(const Slice& key, const Slice& value)

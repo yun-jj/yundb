@@ -9,11 +9,9 @@
 namespace yundb
 {
   DataBlockBuilder::DataBlockBuilder(const Options& options)
-      : _block_position(0), 
-        _restart_interval(options.block_restart_interval)
+      : _options(options),
+        _count(0)
   {
-    // Insert first ptr
-    _restart_Ptrs.push_back(0);
     // Pre allocate space
     _data.reserve(options.block_size);
   }
@@ -45,7 +43,7 @@ namespace yundb
     {
       _head_Key.clear();
       _head_Key.append(key.data(), key.size());
-      _restart_Ptrs.push_back(_data.size() - _block_position);
+      _restart_Ptrs.push_back(_data.size());
     }
     // Put shared key len
     PutVarint64(&_data, pos);
@@ -59,30 +57,30 @@ namespace yundb
     _data.append(value.data(), value.size());
     ++_count;
     // Get restart interval
-    if (_count == _restart_interval)
+    if (_count == _options.block_restart_interval)
       _count = 0;
     // Update Last Key
     _last_Key.assign(key.data(), key.size());
   }
 
-  Slice DataBlockBuilder::finish()
+  std::string DataBlockBuilder::finish()
   {
-    for (int i = 0; _restart_Ptrs.size() > i; i++)
+    for (size_t i = 0; _restart_Ptrs.size() > i; i++)
       PutFixed32(&_data, _restart_Ptrs[i]);
-    PutFixed32(&_data, _restart_Ptrs.size());
+    PutFixed32(&_data, static_cast<uint32_t>(_restart_Ptrs.size()));
     // Clear and prepare new data block
     _count = 0;
     _restart_Ptrs.clear();
-    auto oldBlockposition = _block_position;
-    _block_position = _data.size();
-    return Slice(_data.data() + oldBlockposition,
-                 _data.size() - oldBlockposition);
+    std::string block; 
+    block.swap(_data);
+    _data.reserve(_options.block_size);
+    return block;
   }
 
   size_t DataBlockBuilder::assumeBlockSize(const Slice& key,
                                            const Slice& value) const
   {
-    size_t newBlcokSize = _block_position - _data.size();
+    size_t newBlcokSize = _data.size();
     // 30 is max 3 time variant size
     newBlcokSize += 30 + key.size() + value.size();
     newBlcokSize += (_restart_Ptrs.size() + 1) * 4;

@@ -46,7 +46,8 @@ class SkipList
   Node* newNode(int height, const KeyType& key)
   {
       char* const node = _arena->allocateAligned(
-      sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
+        sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1)
+      );
       return new (node) Node(key);
   }
   Node* getFirstNode() const
