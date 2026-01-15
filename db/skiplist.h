@@ -144,7 +144,7 @@ void SkipList<KeyType, InternalComparator>::findNoLessThanNodePre(
       level -= 1;
       continue;
     }
-    int rs = _comparator(key, next->getKey());
+    int rs = _comparator.cmp(key, next->getKey());
 
     if (rs > 0) cur = next;
     else if (rs < 0)

@@ -2,6 +2,7 @@
 #define MEMTABLE_H
 
 #include "yundb/slice.h"
+#include "yundb/comparator.h"
 #include "yundb/options.h"
 #include "dbformat.h"
 #include "skiplist.h"
@@ -14,18 +15,6 @@
 
 namespace yundb
 {
-
-/* Use for skiplist comparator */
-class InternalComparator
-{
- public:
-  InternalComparator(const Options& options);
-  ~InternalComparator() = default;
-
-  int operator()(const Slice& key1, const Slice& key2) const;
- private:
-  Options _options;
-};
 
 class MemTable
 {

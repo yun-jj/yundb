@@ -28,4 +28,14 @@ void Version::unRef()
   if (_ref == 0) delete this;
 }
 
+VersionSet::VersionSet(const std::string dbName, const Options options,
+                       std::shared_ptr<Comparator> InternalComparator)
+      : _dbName(dbName),
+        _options(options), 
+        _comparator(InternalComparator),
+        _cur(nullptr),
+        _dummyVersion(this) {}
+
+VersionSet::~VersionSet() {}
+
 }

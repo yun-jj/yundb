@@ -1,6 +1,8 @@
 #ifndef VERSION_SET_H
 #define VERSION_SET_H
 
+#include "yundb/en.h"
+#include "yundb/options.h"
 #include "dbformat.h"
 #include "version_edit.h"
 
@@ -16,9 +18,12 @@ class Version
   explicit Version(VersionSet* versonSet)
       : _ref(0),
         _compactFileLevel(-1),
+        _compactFile(nullptr),
         _compactionScore(-1),
         _compactionLevel(-1),
-        _versionSet(versonSet) {}
+        _versionSet(versonSet),
+        _pre(this),
+        _next(this) {}
   Version(const Version& other) = delete;
   Version& operator=(const Version& other) = delete;
 
@@ -28,7 +33,9 @@ class Version
   void unRef();
  private:
   int _ref;
+  // Next compact file and level
   int _compactFileLevel;
+  FileMeta * _compactFile;
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by VersionSet::Finalize().
@@ -46,8 +53,16 @@ class Version
 class VersionSet
 {
  public:
+  VersionSet(const std::string dbName, const Options options,
+             std::shared_ptr<Comparator> internalComparator);
+  ~VersionSet();
  private:
   friend class Version;
+  friend class VersionEdit;
+  
+  const std::string _dbName;
+  Options _options;
+  std::shared_ptr<Comparator> _comparator;
   // Cur version
   Version* _cur;
   Version _dummyVersion;

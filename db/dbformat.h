@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "yundb/slice.h"
+#include "yundb/comparator.h"
 
 namespace yundb
 {
@@ -30,13 +31,32 @@ constexpr int BlockTrailerSize = 5;
 
 
 uint64_t packSeqAndType(SequenceNumber seq, ValueType type);
-/* Data pointer start adress 
-   Set nullptr for seq or type meaning I dont want get
-*/
+
+// Data pointer start adress 
+// Set nullptr for seq or type meaning you dont want get
 void decodeSeqAndType(const char* data, SequenceNumber* seq, ValueType* type);
-/* Useful for get() in memtable 
-   Lookup entry format is | VarintKeySize | user key | seq and type |
-*/
+
+
+// Decode format | key | seq, type |
+Slice decodeKey(const Slice& entry);
+
+// Decode format | value |
+Slice decodeValue(const Slice& entry);
+
+class InternalComparator : public Comparator
+{
+ public:
+  InternalComparator(const Options& options);
+  ~InternalComparator() = default;
+
+  const char* name() const override;
+  int cmp(const Slice& key1, const Slice& key2) const override;
+ private:
+  Options _options;
+};
+
+// Useful for get() in memtable 
+// Lookup entry format is | VarintKeySize | user key | seq and type |
 class LookUpKey
 {
  public:

@@ -39,6 +39,12 @@ class VersionEdit
   VersionEdit(){clear();};
   ~VersionEdit() = default;
 
+  // Encode edit to dst
+  void encode(std::string* dst);
+
+  // Decode edit informations
+  void decode(const Slice& data);
+
   void addFile(int level, uint64_t fileNumber, size_t fileSize,
                const std::string& largest, const std::string& smallest)
   {
@@ -54,9 +60,6 @@ class VersionEdit
     _deleteFiles.insert(std::make_pair(level, fileNumber));
   }
 
-  void encode(std::string* dst);
-
-  void decode(const Slice& data);
 
   void setComparatorName(std::string name)
   {

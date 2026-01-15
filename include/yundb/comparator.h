@@ -9,14 +9,15 @@ namespace yundb
 class Comparator
 {
  public:
-  Comparator() = default;
-  virtual ~Comparator() = default;
-  // Three-way comparison.  Returns value:
-  //   < 0 iff "a" < "b",
-  //   == 0 iff "a" == "b",
-  //   > 0 iff "a" > "b"
-  virtual int cmp(const Slice& key1, const Slice& key2) const = 0;
+   Comparator() = default;
+   virtual ~Comparator() = default;
+
+   // Comparator name
+   virtual const char* name() const = 0;
+   virtual int cmp(const Slice& key1, const Slice& key2) const = 0;
 };
+
+
 
 Comparator* BytewiseCmp();
 
