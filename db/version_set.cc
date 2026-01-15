@@ -28,6 +28,25 @@ void Version::unRef()
   if (_ref == 0) delete this;
 }
 
+class VersionSet::Builder
+{
+ public:
+  Builder(VersionSet* set, Version* version);
+  ~Builder() = default;
+
+  Builder(const Builder& other) = delete; 
+  Builder& operator=(const Builder& other) = delete;
+  void apply(VersionEdit* edit);
+  void saveTo(Version* v);
+ private:
+  VersionSet* _set;
+  Version* _curVersion;
+};
+
+VersionSet::Builder::Builder(VersionSet* set, Version* version)
+      : _set(set),
+        _curVersion(version) {}
+
 VersionSet::VersionSet(const std::string dbName, const Options options,
                        std::shared_ptr<Comparator> InternalComparator)
       : _dbName(dbName),

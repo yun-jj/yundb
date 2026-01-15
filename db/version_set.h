@@ -3,8 +3,10 @@
 
 #include "yundb/en.h"
 #include "yundb/options.h"
+#include "log_writer.h"
 #include "dbformat.h"
 #include "version_edit.h"
+#include "util/sync.h"
 
 #include <memory>
 #include <vector>
@@ -56,16 +58,34 @@ class VersionSet
   VersionSet(const std::string dbName, const Options options,
              std::shared_ptr<Comparator> internalComparator);
   ~VersionSet();
+  // Apply *edit to the current version to form a new descriptor that
+  // is both saved to persistent state and installed as the new
+  // current version.  Will release *mu while actually writing to the file.
+  // REQUIRES: *mu is held on entry.
+  // REQUIRES: no other thread concurrently calls LogAndApply()
+  void logAndApply(const VersionEdit& edit, sync::Mutex* mu);
  private:
+  class Builder;
   friend class Version;
   friend class VersionEdit;
   
   const std::string _dbName;
-  Options _options;
+  const Options _options;
   std::shared_ptr<Comparator> _comparator;
+  uint64_t _nextFileNumber;
+  uint64_t _manifestFileNumber;
+  uint64_t _lastSequence;
+  uint64_t _logNumber;
+  uint64_t _preLogNumber;
+
+  // Opened lazily
+  std::shared_ptr<WritableFile> _descriptorFile;
+  std::shared_ptr<Writer> _descriptorLog;
   // Cur version
   Version* _cur;
   Version _dummyVersion;
+  // 
+  std::vector<std::pair<int, std::string>> _compactPoints;
 };
 
 }
