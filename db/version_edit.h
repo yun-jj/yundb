@@ -3,6 +3,7 @@
 
 #include "dbformat.h"
 
+#include <memory>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -11,25 +12,28 @@
 
 namespace yundb
 {
-
-// When time == 0 this file will be compation
-constexpr uint32_t AllowedSeekTime = (1 << 30);
-
-constexpr int MaxFileLevel = 7;
-
 // FileMeta requires std::shared_ptr for automatic cleanup
 struct FileMeta
 {
-   FileMeta() : allowedSeek(AllowedSeekTime), fileSize(0) {}
-   // Allowed seek time
-   int allowedSeek;
-   // The file number
-   uint64_t number;
-   // The largest key
-   std::string largest;
-   // The smallest key;
-   std::string smallest;
-   size_t fileSize;
+  FileMeta() : ref(0), allowedSeek(AllowedSeekTime), fileSize(0) {}
+  FileMeta(uint64_t fileNumber, size_t fileSize,
+           const std::string& largest, const std::string& smallest)
+      : ref(0),
+        allowedSeek(AllowedSeekTime),
+        number(fileNumber),
+        largest(largest),
+        smallest(smallest) {}
+  
+  int ref;
+  // Allowed seek time
+  int allowedSeek;
+  // The file number
+  uint64_t number;
+  // The largest key
+  std::string largest;
+  // The smallest key;
+  std::string smallest;
+  size_t fileSize;
 };
 
 class VersionEdit
@@ -48,12 +52,10 @@ class VersionEdit
   void addFile(int level, uint64_t fileNumber, size_t fileSize,
                const std::string& largest, const std::string& smallest)
   {
-    FileMeta file;
-    file.fileSize = fileSize;
-    file.largest = largest;
-    file.smallest = smallest;
-    file.number = fileNumber;
-    _newFiles.push_back(std::make_pair(level, file));
+    _newFiles.push_back(
+      std::make_pair(level, std::make_shared<FileMeta>(
+        fileNumber, fileSize, largest, smallest))
+      );
   }
 
   void deleteFile(int level, uint64_t fileNumber){
@@ -95,6 +97,8 @@ class VersionEdit
   }
 
  private:
+  friend class VersionSet;
+
   bool _hasComparatorName;
   bool _hasLogNumber;
   bool _hasPreLogNumber;
@@ -108,7 +112,7 @@ class VersionEdit
   SequenceNumber _lastSequenceNumber;
   // pair first is level
   std::vector<std::pair<int, std::string>> _compactPoints;
-  std::vector<std::pair<int, FileMeta>> _newFiles;
+  std::vector<std::pair<int, std::shared_ptr<FileMeta>>> _newFiles;
   // int for level uint64_t for delete file number
   std::set<std::pair<int, uint64_t>> _deleteFiles;
 };

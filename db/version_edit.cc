@@ -83,13 +83,13 @@ void VersionEdit::encode(std::string* dst)
 
   for (size_t i = 0; _newFiles.size() > i; i++)
   {
-    const FileMeta& file = _newFiles[i].second;
+    auto file = _newFiles[i].second;
     PutVarint32(dst, NewFile);
     PutVarint32(dst, _newFiles[i].first);
-    PutVarint32(dst, file.number);
-    PutVarint32(dst, file.fileSize);
-    PutLengthPrefixedSlice(dst, file.largest);
-    PutLengthPrefixedSlice(dst, file.smallest);
+    PutVarint32(dst, file->number);
+    PutVarint32(dst, file->fileSize);
+    PutLengthPrefixedSlice(dst, file->largest);
+    PutLengthPrefixedSlice(dst, file->smallest);
   }
 }
 
@@ -120,7 +120,7 @@ void VersionEdit::decode(const Slice& data)
   // Temporary storage for parsing
   int level;
   uint64_t number;
-  FileMeta f;
+  std::shared_ptr<FileMeta> f = std::make_shared<FileMeta>();
   Slice str;
   Slice key;
 
@@ -185,13 +185,13 @@ void VersionEdit::decode(const Slice& data)
 
       case NewFile:
         Slice smallest, largest;
-        if (getLevel(&input, &level) && GetVarint64(&input, &f.number) &&
-            GetVarint64(&input, &f.fileSize) &&
+        if (getLevel(&input, &level) && GetVarint64(&input, &f->number) &&
+            GetVarint64(&input, &f->fileSize) &&
             getKey(&input, &smallest) &&
             getKey(&input, &largest))
         {
-          f.largest = largest.toString();
-          f.smallest = smallest.toString();
+          f->largest = largest.toString();
+          f->smallest = smallest.toString();
           _newFiles.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";

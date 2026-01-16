@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include "yundb/options.h"
 #include "yundb/slice.h"
 #include "yundb/comparator.h"
 
@@ -29,6 +30,10 @@ constexpr int KeyTagSize = 8;
 // 1-byte type + 32-bit crc
 constexpr int BlockTrailerSize = 5;
 
+// When time == 0 this file will be compation
+constexpr uint32_t AllowedSeekTime = (1 << 30);
+
+constexpr int MaxFileLevel = 7;
 
 uint64_t packSeqAndType(SequenceNumber seq, ValueType type);
 

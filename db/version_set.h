@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <vector>
+#include <array>
 
 namespace yundb
 {
@@ -84,8 +85,9 @@ class VersionSet
   // Cur version
   Version* _cur;
   Version _dummyVersion;
-  // 
-  std::vector<std::pair<int, std::string>> _compactPoints;
+  // Per-level key at which the next compaction at that level should start.
+  // Either an empty string, or a valid InternalKey.
+  std::array<std::string, MaxFileLevel> _compactPoints;
 };
 
 }
