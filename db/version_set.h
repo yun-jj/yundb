@@ -35,6 +35,8 @@ class Version
   void ref();
   void unRef();
  private:
+  friend class VersionSet;
+
   int _ref;
   // Next compact file and level
   int _compactFileLevel;

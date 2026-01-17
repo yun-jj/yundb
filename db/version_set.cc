@@ -1,5 +1,7 @@
 #include "version_set.h"
 
+#include <algorithm>
+
 namespace yundb
 {
 
@@ -33,16 +35,18 @@ class VersionSet::Builder
  private:
   struct FileComparator
   {
-    std::shared_ptr<Comparator> _internalComparator;
+    std::shared_ptr<Comparator> internalComparator;
 
     bool operator()(const std::shared_ptr<FileMeta> f1,
                     const std::shared_ptr<FileMeta> f2) const
     {
-      int r = _internalComparator->cmp(f1->smallest, f2->smallest);
+      int r = internalComparator->cmp(f1->smallest, f2->smallest);
       if (r != 0) return (r < 0);
       return (f1->number < f2->number);
     }
   };
+
+  void maybeAddFile(Version* v, int level, std::shared_ptr<FileMeta> f);
   
  public:
   Builder(VersionSet* set, Version* version);
@@ -56,7 +60,7 @@ class VersionSet::Builder
   VersionSet* _set;
   Version* _curVersion;
   std::shared_ptr<Comparator> _comparator;
-  std::set<std::shared_ptr<FileMeta>, FileComparator> _newFiles[MaxFileLevel];
+  std::set<std::shared_ptr<FileMeta>, FileComparator> _addedFiles[MaxFileLevel];
   std::set<uint64_t> _deleteFiles[MaxFileLevel];
 };
 
@@ -68,6 +72,23 @@ VersionSet::Builder::Builder(VersionSet* set, Version* version)
 
 VersionSet::Builder::~Builder()
 {_curVersion->unRef();}
+
+void VersionSet::Builder::maybeAddFile(Version* v, int level,
+                                       std::shared_ptr<FileMeta> f)
+{
+  if (_deleteFiles[level].count(f->number) > 0) {
+    // Deleted file do nothing
+  } else {
+    std::vector<std::shared_ptr<FileMeta>>& files = v->_files[level];
+    if (level > 0 && !files.empty())
+    {
+      assert(_set->_comparator->cmp(
+        files.back()->largest, f->smallest) < 0);
+    }
+    f->ref++;
+    files.push_back(f);
+  }
+}
 
 void VersionSet::Builder::apply(VersionEdit* edit)
 {
@@ -109,9 +130,55 @@ void VersionSet::Builder::apply(VersionEdit* edit)
     // That is, we consider compacting this file to the next level
     // when the wasted seek cost on the current file exceeds the cost of compaction.
     _deleteFiles[level].erase(pair.second->number);
-    _newFiles[level].insert(pair.second);
+    _addedFiles[level].insert(pair.second);
   }
 
+}
+
+void VersionSet::Builder::saveTo(Version* v)
+{
+  FileComparator cmp;
+  cmp.internalComparator = _set->_comparator;
+
+  for (int level = 0; level < MaxFileLevel; level++)
+  {
+    const auto& baseFiles = _curVersion->_files[level];
+    std::vector<std::shared_ptr<FileMeta>>::const_iterator baseIter = 
+      baseFiles.begin();
+    std::vector<std::shared_ptr<FileMeta>>::const_iterator baseEnd =
+      baseFiles.end(); 
+    const auto& addedFiles = _addedFiles[level];
+
+    v->_files[level].reserve(baseFiles.size() + addedFiles.size());
+    // Merge sort
+    for (const auto& file : addedFiles)
+    {
+      for (auto bpos = std::upper_bound(baseIter, baseEnd, file, cmp);
+           baseIter != bpos; ++baseIter) {
+        maybeAddFile(v, level, *baseIter);
+      }
+
+      maybeAddFile(v, level, file);
+    }
+
+    // Add remaining base files
+    for (; baseIter != baseEnd; ++baseIter)
+      maybeAddFile(v, level, *baseIter);
+    
+    // Checking there is no overlap
+    if (level > 0)
+    {
+      for (uint32_t i = 1; i < v->_files[level].size(); i++)
+      {
+        const auto& prevEnd = v->_files[level][i - 1]->largest;
+        const auto& thisBegin= v->_files[level][i]->smallest;
+        CERR_PRINT_WITH_CONDITIONAL(
+          "VersionSet: overlapping ranges in level " << level << "\n",
+          _set->_comparator->cmp(prevEnd, thisBegin) >= 0
+        );
+      }
+    }
+  }
 }
 
 VersionSet::VersionSet(const std::string dbName, const Options options,
