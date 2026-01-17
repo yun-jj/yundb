@@ -84,10 +84,10 @@ class VersionEdit
     _hasPreLogNumber = true;
   }
 
-  void setNextLogNumber(uint64_t number)
+  void setNextFileNumber(uint64_t number)
   {
-    _nextLogNumber = number;
-    _hasNextLogNumber = true;
+    _nextFileNumber = number;
+    _hasNextFileNumber = true;
   }
 
   void setLastSequence(SequenceNumber number)
@@ -102,13 +102,13 @@ class VersionEdit
   bool _hasComparatorName;
   bool _hasLogNumber;
   bool _hasPreLogNumber;
-  bool _hasNextLogNumber;
+  bool _hasNextFileNumber;
   bool _hasLastSequenceNumber;
 
   std::string _comparatorName;
   uint64_t _logNumber;
   uint64_t _preLogNumber;
-  uint64_t _nextLogNumber;
+  uint64_t _nextFileNumber;
   SequenceNumber _lastSequenceNumber;
   // pair first is level
   std::vector<std::pair<int, std::string>> _compactPoints;

@@ -17,7 +17,9 @@ class Writer
   Writer(Writer& other) = delete;
   Writer& operator=(Writer& other) = delete;
   explicit Writer(WritableFile* file, size_t block_offset) 
-    : _dest(file), _block_offset(block_offset) {}
+      : _dest(file), _block_offset(block_offset) {}
+  explicit Writer(WritableFile* file)
+      : _dest(file), _block_offset(0) {}
   ~Writer() = default;
   void appendRecord(const Slice& record);
  private:

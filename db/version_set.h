@@ -66,7 +66,37 @@ class VersionSet
   // current version.  Will release *mu while actually writing to the file.
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
-  void logAndApply(const VersionEdit& edit, sync::Mutex* mu);
+  void logAndApply(VersionEdit& edit, sync::Mutex* mu);
+
+  // Return current version
+  Version* current() {return _cur;}
+
+  uint64_t getManifestFileNumber() {return _manifestFileNumber;}
+
+  uint64_t getNewFileNumber() {return _nextFileNumber++;}
+
+  int levelTablesNumber(int level) const
+  {
+    CERR_PRINT_WITH_CONDITIONAL(
+      "VersionSet: level number error",
+      level < 0 || level > MaxFileLevel
+    );
+    return _cur->_files[level].size();
+  }
+
+  uint64_t levelTablesBytes(int level) const
+  {
+    CERR_PRINT_WITH_CONDITIONAL(
+      "VersionSet: level number error",
+      level < 0 || level > MaxFileLevel
+    );
+    uint64_t result = 0;
+    for (auto f : _cur->_files[level])
+      result += f->fileSize;
+
+    return result;
+  }
+
  private:
   class Builder;
   friend class Version;
@@ -82,8 +112,8 @@ class VersionSet
   uint64_t _preLogNumber;
 
   // Opened lazily
-  std::shared_ptr<WritableFile> _descriptorFile;
-  std::shared_ptr<Writer> _descriptorLog;
+  WritableFile* _descriptorFile;
+  Writer* _descriptorLog;
   // Cur version
   Version* _cur;
   Version _dummyVersion;

@@ -10,7 +10,7 @@ enum LogTag
   ComparatorNameTag = 1,
   LogNumber = 2,
   PreLogNumber = 3,
-  NextLogNumber = 4,
+  NextFileNumber = 4,
   LastSequnce = 5,
   CompactPointer = 6,
   DeleteFile = 7,
@@ -26,12 +26,12 @@ void VersionEdit::clear()
   _deleteFiles.clear();
   _logNumber = 0;
   _preLogNumber = 0;
-  _nextLogNumber = 0;
+  _nextFileNumber = 0;
   _lastSequenceNumber = 0;
   _hasComparatorName = false;
   _hasLogNumber = false;
   _hasPreLogNumber = false;
-  _hasNextLogNumber = false;
+  _hasNextFileNumber = false;
   _hasLastSequenceNumber = false;
 }
 
@@ -55,10 +55,10 @@ void VersionEdit::encode(std::string* dst)
     PutVarint64(dst, _preLogNumber);
   }
   
-  if (_hasNextLogNumber)
+  if (_hasNextFileNumber)
   {
-    PutVarint32(dst, NextLogNumber);
-    PutVarint64(dst, _nextLogNumber);
+    PutVarint32(dst, NextFileNumber);
+    PutVarint64(dst, _nextFileNumber);
   }
 
   if (_hasLastSequenceNumber)
@@ -151,9 +151,9 @@ void VersionEdit::decode(const Slice& data)
         }
         break;
 
-      case NextLogNumber:
-        if (GetVarint64(&input, &_nextLogNumber)) {
-          _hasNextLogNumber = true;
+      case NextFileNumber:
+        if (GetVarint64(&input, &_nextFileNumber)) {
+          _hasNextFileNumber = true;
         } else {
           msg = "next file number";
         }

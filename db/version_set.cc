@@ -1,4 +1,5 @@
 #include "version_set.h"
+#include "util/file_name.h"
 
 #include <algorithm>
 
@@ -173,7 +174,7 @@ void VersionSet::Builder::saveTo(Version* v)
         const auto& prevEnd = v->_files[level][i - 1]->largest;
         const auto& thisBegin= v->_files[level][i]->smallest;
         CERR_PRINT_WITH_CONDITIONAL(
-          "VersionSet: overlapping ranges in level " << level << "\n",
+          "VersionSet: overlapping ranges in level " << level,
           _set->_comparator->cmp(prevEnd, thisBegin) >= 0
         );
       }
@@ -190,5 +191,63 @@ VersionSet::VersionSet(const std::string dbName, const Options options,
         _dummyVersion(this) {}
 
 VersionSet::~VersionSet() {}
+
+void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
+{
+  if (edit._hasLogNumber)
+  {
+    CERR_PRINT_WITH_CONDITIONAL(
+      "VersionSet: log number error",
+      edit._logNumber < _logNumber || 
+      edit._logNumber >= _nextFileNumber
+    );
+  }
+  else edit.setLogNumber(_logNumber);
+
+  if (!edit._hasPreLogNumber)
+    edit.setPreLogNumber(_preLogNumber);
+
+  edit.setNextFileNumber(_nextFileNumber);
+  edit.setLastSequence(_lastSequence);
+
+  Version* v = new Version(this);
+  {
+    Builder builder(this, _cur);
+    builder.apply(&edit);
+    builder.saveTo(v);
+  }
+  
+  // Finalize(v)
+
+  std::string newManifestFile;
+  if (_descriptorLog == nullptr)
+  {
+    // No reason to unlock *mu here since we only hit this path in the
+    // first call to LogAndApply (when opening the database).
+    assert(_descriptorFile == nullptr);
+    newManifestFile = generateDescriptorFileName(_manifestFileNumber, _dbName);
+    newWritableFile(newManifestFile, &_descriptorFile);
+    // Writer need crc code
+    _descriptorLog = new Writer(_descriptorFile);
+    // WriteSnapshot(_descriptorLog)
+  }
+
+  // Unlock during expensive MANIFEST log write
+  {
+    mu->Unlock();
+
+    // Write new record to MANIFEST log
+    std::string record;
+    edit.encode(&record);
+    _descriptorLog->appendRecord(record);
+    _descriptorFile->sync();
+
+    if (!newManifestFile.empty())
+      // setCurrentFile(env, dbname, manifestFileNumber);
+    mu->Lock();
+  }
+
+  // Update new version
+}
 
 }
