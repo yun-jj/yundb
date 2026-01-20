@@ -234,6 +234,47 @@ void VersionSet::finalize(Version* version)
   version->_compactionScore = baseScore;
 }
 
+void VersionSet::appendVersion(Version* version)
+{
+  assert(version->_ref == 0);  
+  assert(version != _cur);
+
+  if (_cur != nullptr) _cur->unRef();
+
+  _cur = version;
+  version->ref();
+
+  version->_pre = _dummyVersion._pre;
+  version->_next = &_dummyVersion;
+  version->_pre->_next = version;
+  version->_next->_pre = version;
+}
+
+void VersionSet::saveSnapshot(Writer* log)
+{
+  VersionEdit edit;
+  edit.setComparatorName(_comparator->name());
+
+  // Save compaction pointers
+  for (int level = 0; MaxFileLevel > level; level++)
+  {
+    if (!_compactPoints[level].empty())
+      edit.setCompactPointer(level, _compactPoints[level]);
+  }
+
+  // Save files
+  for (int level = 0; MaxFileLevel > level; level++)
+  {
+    auto& fileVector = _cur->_files[level];
+    for (auto& f : fileVector)
+      edit.addFile(level, f->number, f->fileSize, f->smallest, f->largest);
+  }
+
+  std::string record;
+  edit.encode(&record);
+  log->appendRecord(record);
+}
+
 void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
 {
   if (edit._hasLogNumber)
@@ -271,7 +312,7 @@ void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
     newWritableFile(newManifestFile, &_descriptorFile);
     // Writer need crc code
     _descriptorLog = new Writer(_descriptorFile);
-    // WriteSnapshot(_descriptorLog)
+    saveSnapshot(_descriptorLog);
   }
 
   // Unlock during expensive MANIFEST log write
@@ -285,7 +326,7 @@ void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
     _descriptorFile->sync();
 
     if (!newManifestFile.empty())
-      // setCurrentFile(env, dbname, manifestFileNumber);
+      setCurrentFile(_options.env, _dbName, _manifestFileNumber);
     mu->Lock();
   }
 

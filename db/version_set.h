@@ -102,6 +102,10 @@ class VersionSet
   // Choice level for compaction
   void finalize(Version* version);
 
+  void appendVersion(Version* version);
+
+  void saveSnapshot(Writer* log);
+
   class Builder;
   friend class Version;
   friend class VersionEdit;
@@ -120,6 +124,7 @@ class VersionSet
   Writer* _descriptorLog;
   // Cur version
   Version* _cur;
+  // node<->node<-.......node<->dummy
   Version _dummyVersion;
   // Per-level key at which the next compaction at that level should start.
   // Either an empty string, or a valid InternalKey.

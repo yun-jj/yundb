@@ -17,12 +17,12 @@ struct FileMeta
 {
   FileMeta() : ref(0), allowedSeek(AllowedSeekTime), fileSize(0) {}
   FileMeta(uint64_t fileNumber, size_t fileSize,
-           const std::string& largest, const std::string& smallest)
+           const std::string& smallest, const std::string& largest)
       : ref(0),
         allowedSeek(AllowedSeekTime),
         number(fileNumber),
-        largest(largest),
-        smallest(smallest) {}
+        smallest(smallest),
+        largest(largest) {}
   
   int ref;
   // Allowed seek time
@@ -30,9 +30,9 @@ struct FileMeta
   // The file number
   uint64_t number;
   // The largest key
-  std::string largest;
-  // The smallest key;
   std::string smallest;
+  // The smallest key;
+  std::string largest;
   size_t fileSize;
 };
 
@@ -50,11 +50,11 @@ class VersionEdit
   void decode(const Slice& data);
 
   void addFile(int level, uint64_t fileNumber, size_t fileSize,
-               const std::string& largest, const std::string& smallest)
+               const std::string& smallest, const std::string& largest)
   {
     _newFiles.push_back(
       std::make_pair(level, std::make_shared<FileMeta>(
-        fileNumber, fileSize, largest, smallest))
+        fileNumber, fileSize, smallest, largest))
       );
   }
 
@@ -95,6 +95,9 @@ class VersionEdit
     _lastSequenceNumber = number;
     _hasLastSequenceNumber = true;
   }
+
+  void setCompactPointer(int level, const std::string& key)
+  {_compactPoints.push_back(std::make_pair(level, key));}
 
  private:
   friend class VersionSet;
