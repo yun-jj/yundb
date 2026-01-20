@@ -192,6 +192,48 @@ VersionSet::VersionSet(const std::string dbName, const Options options,
 
 VersionSet::~VersionSet() {}
 
+void VersionSet::finalize(Version* version)
+{
+  int baseLevel = -1;
+  double baseScore = -1.0;
+  double curScore;
+
+  for (int level = 0; MaxFileLevel > level; level++)
+  {
+    if (level == 0)
+    {
+      // We treat level-0 specially by bounding the number of files
+      // instead of number of bytes for two reasons:
+      //
+      // (1) With larger write-buffer sizes, it is nice not to do too
+      // many level-0 compactions.
+      //
+      // (2) The files in level-0 are merged on every read and
+      // therefore we wish to avoid too many files when the individual
+      // file size is small (perhaps because of a small write-buffer
+      // setting, or very high compression ratios, or lots of
+      // overwrites/deletions).
+
+      curScore = static_cast<double>(version->_files[level].size())
+        / static_cast<double>(L0CompactionTrigger);
+    }
+    else
+    {
+      curScore = static_cast<double>(levelTablesBytes(level))
+        / static_cast<double>(maxBytesForLevel(level));
+    }
+
+    if (curScore > baseScore)
+    {
+      baseScore = curScore;
+      baseLevel = level;
+    }
+  }
+
+  version->_compactFileLevel = baseLevel;
+  version->_compactionScore = baseScore;
+}
+
 void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
 {
   if (edit._hasLogNumber)
@@ -217,7 +259,7 @@ void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
     builder.saveTo(v);
   }
   
-  // Finalize(v)
+  finalize(v);
 
   std::string newManifestFile;
   if (_descriptorLog == nullptr)
@@ -248,6 +290,20 @@ void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
   }
 
   // Update new version
+}
+
+static uint64_t maxBytesForLevel(int level)
+{
+  // Init for 10 MB
+  uint64_t result = 10 * 1048576;
+  
+  while (level > 0)
+  {
+    result *= 10;
+    level--;
+  }
+
+  return result;
 }
 
 }

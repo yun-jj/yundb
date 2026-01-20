@@ -98,6 +98,10 @@ class VersionSet
   }
 
  private:
+  
+  // Choice level for compaction
+  void finalize(Version* version);
+
   class Builder;
   friend class Version;
   friend class VersionEdit;

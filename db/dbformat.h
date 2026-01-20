@@ -20,20 +20,37 @@ using SequenceNumber = uint64_t;
 
 constexpr SequenceNumber MaxSequenceNumber = ((0x1ull << 56) - 1);
 
-constexpr ValueType MaxValueType = TypeValue; 
+constexpr ValueType MaxValueType = TypeValue;
 
 constexpr ValueType TypeForSeek = TypeValue;
 
 // Format: sequence 7B type 1B 
-constexpr int KeyTagSize = 8;
+constexpr const int KeyTagSize = 8;
 
 // 1-byte type + 32-bit crc
-constexpr int BlockTrailerSize = 5;
+constexpr const int BlockTrailerSize = 5;
 
 // When time == 0 this file will be compation
-constexpr uint32_t AllowedSeekTime = (1 << 30);
+constexpr const uint32_t AllowedSeekTime = (1 << 30);
 
-constexpr int MaxFileLevel = 7;
+constexpr const int MaxFileLevel = 7;
+
+// Level-0 compaction is started when we hit this many files.
+constexpr const int L0CompactionTrigger = 4;
+
+// Soft limit on number of level-0 files. We slow down writes at this point. 
+constexpr const int L0SlowdownWritesTrigger = 8;
+
+// Maximum number of level-0 files.  We stop writes at this point.
+constexpr const int L0StopWritesTrigger = 12;
+
+// Maximum level to which a new compacted memtable is pushed if it
+// does not create overlap.  We try to push to level 2 to avoid the
+// relatively expensive level 0=>1 compactions and to avoid some
+// expensive manifest file operations.  We do not push all the way to
+// the largest level since that can generate a lot of wasted disk
+// space if the same key space is being repeatedly overwritten.
+constexpr const int MaxMemCompactLevel = 2;
 
 uint64_t packSeqAndType(SequenceNumber seq, ValueType type);
 

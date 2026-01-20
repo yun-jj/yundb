@@ -99,4 +99,32 @@ std::string generateOldInfoLogFileName(const std::string& dbName)
 std::string generateLockFileName(const std::string& dbName)
 {return dbName + "/LOCK";}
 
+std::string currentFileName(const std::string& dbname)
+{return dbname + "/CURRENT";}
+
+bool setCurrentFile(Env* env, const std::string& dbname,
+                    uint64_t descriptorNumber)
+{
+  std::string manifestName = generateDescriptorFileName(descriptorNumber, dbname);
+  Slice content = manifestName;
+
+  content.removePrefix(dbname.size() + 1);
+  std::string tmp = generateTempFileName(descriptorNumber, dbname);
+  bool result = WriteStringToFileSync(content.toString() + "\n", tmp); 
+
+  if (result)
+  {
+    bool result = env->RenameFile(tmp, currentFileName(dbname));
+
+    if (!result)
+    {
+      env->RemoveFile(tmp);
+      return false;
+    }
+  }
+  else return false;
+
+  return true;
+}
+
 }

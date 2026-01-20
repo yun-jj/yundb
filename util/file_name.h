@@ -1,6 +1,8 @@
 #ifndef FILE_NAME_H
 #define FILE_NAME_H
 
+#include "yundb/en.h"
+
 #include <string>
 
 namespace yundb
@@ -38,6 +40,11 @@ std::string generateLockFileName(const std::string& dbName);
 std::string generateInfoLogFileName(const std::string& dbName);
 
 std::string generateOldInfoLogFileName(const std::string& dbName);
+
+bool setCurrentFile(Env* env, const std::string& dbname,
+                    uint64_t descriptorNumber);
+
+std::string currentFileName(const std::string& dbname);
 
 }
 

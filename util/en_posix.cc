@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <string.h>
+#include <memory>
 
 #include "util/error_print.h"
 #include "yundb/en.h"
@@ -18,6 +19,12 @@ Env* Env::Default()
 {
   return nullptr;
 }
+
+bool Env::RemoveFile(const std::string& fname)
+{return removeFile(fname);}
+
+bool Env::RenameFile(const std::string& src, const std::string& target)
+{return renameFile(src, target);}
 
 namespace
 {
@@ -189,7 +196,7 @@ class RandomAccessPosixFile final : public RandomAccessFile
 
 }
 
-void newWritableFile(std::string& file_name, WritableFile** result)
+void newWritableFile(const std::string& file_name, WritableFile** result)
 {
   int fd = ::open(file_name.c_str(), O_APPEND | O_WRONLY | O_CREAT, 0644);
   if (fd < 0)
@@ -202,7 +209,7 @@ void newWritableFile(std::string& file_name, WritableFile** result)
   return; 
 }
 
-void newRandomAccessFile(std::string& file_name, RandomAccessFile** result)
+void newRandomAccessFile(const std::string& file_name, RandomAccessFile** result)
 {
   int fd = ::open(file_name.c_str(), O_RDONLY);
 
@@ -214,6 +221,49 @@ void newRandomAccessFile(std::string& file_name, RandomAccessFile** result)
 
   *result = new RandomAccessPosixFile(fd, file_name);
   return;
+}
+
+static bool removeFile(const std::string& fname)
+{
+  if (::unlink(fname.c_str()) != 0)
+  {
+    CERR_PRINT("removeFile: remove fail");
+    return false;
+  }
+  return true;
+}
+
+bool WriteStringToFile(const Slice& data, const std::string& fname)
+{return DoWriteStringToFile(data, fname, false);}
+
+bool WriteStringToFileSync(const Slice& data, const std::string& fname)
+{return DoWriteStringToFile(data, fname, true);}
+
+static bool DoWriteStringToFile(const Slice& data, const std::string& fname,
+                                bool shouldSync)
+{
+  WritableFile* file = nullptr;
+  newWritableFile(fname, &file);
+
+  if (file == nullptr) return false;
+
+  std::shared_ptr<WritableFile> filePtr(file);
+
+  filePtr->append(data);
+  if (shouldSync) filePtr->sync();
+
+  return true;
+}
+
+static bool renameFile(const std::string& src, const std::string& target)
+{
+  if (std::rename(target.c_str(), target.c_str()) != 0)
+  {
+    CERR_PRINT("renameFile: rename fail");
+    return false;
+  }
+
+  return true;
 }
 
 }
