@@ -15,9 +15,41 @@
 namespace yundb
 {
 
+// Return the smallest index i such that files[i]->largest >= key.
+// Return files.size() if there is no such file.
+// REQUIRES: "files" contains a sorted list of non-overlapping files.
+int FindFile(const std::shared_ptr<Comparator> cmp,
+             const std::vector<std::shared_ptr<FileMeta>>& files,
+             const Slice& key);
+
+// Returns true iff some file in "files" overlaps the user key range
+// [*smallest,*largest].
+// smallest==nullptr represents a key smaller than all keys in the DB.
+// largest==nullptr represents a key largest than all keys in the DB.
+// REQUIRES: If disjoint_sorted_files, files[] contains disjoint ranges
+//           in sorted order.
+bool SomeFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
+                           bool disjointSortedFiles,
+                           const std::vector<std::shared_ptr<FileMeta>>& files,
+                           const Slice* smallestUserKey,
+                           const Slice* largestUserKey);
+
 class Version
 {
  public:
+  // Returns true iff some file in the specified level overlaps
+  // some part of [*smallest_user_key,*largest_user_key].
+  // smallest_user_key==nullptr represents a key smaller than all the DB's keys.
+  // largest_user_key==nullptr represents a key largest than all the DB's keys.
+  bool overlapInLevel(int level, const Slice* smallest_user_key,
+                      const Slice* largest_user_key);
+  // Return a level for compact memtable
+  int pickLevelForMemTableOutput(const Slice& smallestUserKey,
+                                 const Slice& largestUserKey);
+  void ref();
+  void unRef();
+ private:
+
   explicit Version(VersionSet* versonSet)
       : _ref(0),
         _compactFileLevel(-1),
@@ -32,9 +64,6 @@ class Version
 
   ~Version();
 
-  void ref();
-  void unRef();
- private:
   friend class VersionSet;
 
   int _ref;
@@ -66,7 +95,7 @@ class VersionSet
   // current version.  Will release *mu while actually writing to the file.
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
-  void logAndApply(VersionEdit& edit, sync::Mutex* mu);
+  bool logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept;
 
   // Return current version
   Version* current() {return _cur;}

@@ -6,6 +6,77 @@
 namespace yundb
 {
 
+int FindFile(const std::shared_ptr<Comparator> cmp,
+             const std::vector<std::shared_ptr<FileMeta>>& files,
+             const Slice& key)
+{
+  uint32_t left = 0;
+  uint32_t right = files.size();
+  while (left < right) {
+    uint32_t mid = (left + right) / 2;
+    const auto& f = files[mid];
+    if (cmp->cmp(f->largest, key) < 0) {
+      // Key at "mid.largest" is < "target".  Therefore all
+      // files at or before "mid" are uninteresting.
+      left = mid + 1;
+    } else {
+      // Key at "mid.largest" is >= "target".  Therefore all files
+      // after "mid" are uninteresting.
+      right = mid;
+    }
+  }
+  return right;
+}
+
+static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
+                      const std::shared_ptr<FileMeta> f)
+{
+  // null user_key occurs before all keys and is therefore never after *f
+  return (key != nullptr && cmp->cmp(*key, f->largest) > 0); 
+}
+
+static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
+                       const std::shared_ptr<FileMeta> f)
+{
+  // null user_key occurs after all keys and is therefore never before *f
+  return (key != nullptr && cmp->cmp(*key, f->smallest) < 0);
+}
+
+bool SomeFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
+                           bool disjointSortedFiles,
+                           const std::vector<std::shared_ptr<FileMeta>>& files,
+                           const Slice* smallestUserKey,
+                           const Slice* largestUserKey)
+{
+  if (!disjointSortedFiles) {
+    // Need to check against all files
+    for (size_t i = 0; i < files.size(); i++) {
+      const auto& f = files[i];
+      if (afterFile(cmp, smallestUserKey, f) ||
+          beforeFile(cmp, largestUserKey, f)) {
+        // No overlap
+      } else {
+        return true;  // Overlap
+      }
+    }
+    return false;
+  }
+
+  // Binary search over file list
+  uint32_t index = 0;
+  if (smallestUserKey != nullptr) {
+    // Find the earliest possible internal key for smallest_user_key
+    index = FindFile(cmp, files, *smallestUserKey);
+  }
+
+  if (index >= files.size()) {
+    // beginning of range is after all files, so no overlap.
+    return false;
+  }
+
+  return !beforeFile(cmp, largestUserKey, files[index]);
+}
+
 Version::~Version()
 {
   _pre->_next = _next;
@@ -29,6 +100,18 @@ void Version::unRef()
   _ref--;
 
   if (_ref == 0) delete this;
+}
+bool Version::overlapInLevel(int level, const Slice* smallestUserKey,
+                             const Slice* largestUserKey)
+{
+  return SomeFileOverlapsRange(_versionSet->_comparator, (level > 0), _files[level],
+                               smallestUserKey, largestUserKey);
+}                  
+
+int Version::pickLevelForMemTableOutput(const Slice& smallestUserKey,
+                                        const Slice& largestUserKey)
+{
+  // Next coding palce 
 }
 
 class VersionSet::Builder
@@ -275,7 +358,7 @@ void VersionSet::saveSnapshot(Writer* log)
   log->appendRecord(record);
 }
 
-void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
+bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
 {
   if (edit._hasLogNumber)
   {
@@ -294,6 +377,8 @@ void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
   edit.setLastSequence(_lastSequence);
 
   Version* v = new Version(this);
+  if (v == nullptr) return false;
+
   {
     Builder builder(this, _cur);
     builder.apply(&edit);
@@ -327,10 +412,15 @@ void VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu)
 
     if (!newManifestFile.empty())
       setCurrentFile(_options.env, _dbName, _manifestFileNumber);
+
     mu->Lock();
   }
 
   // Update new version
+  appendVersion(v);
+  _logNumber = edit._logNumber;
+  _preLogNumber = edit._preLogNumber;
+  return true;
 }
 
 static uint64_t maxBytesForLevel(int level)
