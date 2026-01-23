@@ -43,6 +43,10 @@ class Version
   // largest_user_key==nullptr represents a key largest than all the DB's keys.
   bool overlapInLevel(int level, const Slice* smallest_user_key,
                       const Slice* largest_user_key);
+  // Begin is nullptr means before all keys
+  // end is nullptr means after all keys
+  void Version::getOverlappingInputs(int level, const Slice* begin, const Slice* end,
+                                     std::vector<std::shared_ptr<FileMeta>>& inputs);
   // Return a level for compact memtable
   int pickLevelForMemTableOutput(const Slice& smallestUserKey,
                                  const Slice& largestUserKey);

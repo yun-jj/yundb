@@ -28,6 +28,22 @@ int FindFile(const std::shared_ptr<Comparator> cmp,
   return right;
 }
 
+static size_t targetFileSize(const Options* options)
+{return options->max_file_size;}
+
+// stop building a single file in a level->level+1 compaction.
+static int64_t maxGrandParentOverlapBytes(const Options* options)
+{return 10 * targetFileSize(options);}
+
+
+static size_t totalFileSize(const std::vector<std::shared_ptr<FileMeta>>& files)
+{
+  size_t sums = 0;
+  for (auto& f : files)
+    sums += f->fileSize;
+  return sums;
+}
+
 static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
                       const std::shared_ptr<FileMeta> f)
 {
@@ -106,12 +122,82 @@ bool Version::overlapInLevel(int level, const Slice* smallestUserKey,
 {
   return SomeFileOverlapsRange(_versionSet->_comparator, (level > 0), _files[level],
                                smallestUserKey, largestUserKey);
-}                  
+}
+
+// Store in "*inputs" all files in "level" that overlap [begin,end]
+void Version::getOverlappingInputs(int level, const Slice* begin,
+                                   const Slice* end,
+                                   std::vector<std::shared_ptr<FileMeta>>& inputs)
+{
+  assert(level >= 0);
+  assert(level < MaxFileLevel);
+
+  inputs.clear();
+  std::shared_ptr<Comparator> cmp = _versionSet->_comparator;
+
+  for (size_t i = 0; i < _files[level].size();)
+  {
+    auto& f = _files[level][i++];
+    const Slice fileStart(f->smallest);
+    const Slice fileLimit(f->largest);
+    if (begin != nullptr && cmp->cmp(fileLimit, *begin) < 0) {
+      // "f" is completely before specified range; skip it
+    } else if (end != nullptr && cmp->cmp(fileStart, *end) > 0) {
+      // "f" is completely after specified range; skip it
+    }
+    else
+    {
+      inputs.push_back(f);
+      if (level == 0)
+      {
+        // Level-0 files may overlap each other.  So check if the newly
+        // added file has expanded the range.  If so, restart search.
+        if (begin != nullptr && cmp->cmp(fileStart, *begin) < 0)
+        {
+          begin = &fileStart;
+          inputs.clear();
+          i = 0;
+        }
+        else if (end != nullptr && cmp->cmp(fileLimit, *end) > 0)
+        {
+          end = &fileLimit;
+          inputs.clear();
+          i = 0;
+        }
+      }
+    }
+  }
+}
 
 int Version::pickLevelForMemTableOutput(const Slice& smallestUserKey,
                                         const Slice& largestUserKey)
 {
-  // Next coding palce 
+  int level = 0;
+  if (!overlapInLevel(0, &smallestUserKey, &largestUserKey))
+  {
+    std::vector<std::shared_ptr<FileMeta>> overlaps;
+    // Push to next level if there is no overlap in next level,
+    // and the #bytes overlapping in the level after that are limited.
+    while (level < MaxMemCompactLevel)
+    {
+      if (overlapInLevel(level + 1, &smallestUserKey, &largestUserKey)) {
+        break;
+      }
+
+      if (level + 2 < MaxFileLevel)
+      {
+        // Check that file does not overlap too many grandparent bytes.
+        getOverlappingInputs(level + 2, &smallestUserKey, &largestUserKey,
+                             overlaps);
+        const int64_t sum = totalFileSize(overlaps);
+        if (sum > maxGrandParentOverlapBytes(&(_versionSet->_options))) {
+          break;
+        }
+      }
+      level++;
+    }
+  }
+  return level;
 }
 
 class VersionSet::Builder
