@@ -61,16 +61,16 @@ class Env
 
   virtual ~Env();
 
-  virtual bool RemoveFile(const std::string& fname);
+  virtual bool removeFile(const std::string& fname);
 
-  virtual bool RenameFile(const std::string& src, const std::string& target);
+  virtual bool renameFile(const std::string& src, const std::string& target);
 
   static Env* Default();
 };
 
-bool WriteStringToFile(const Slice& data, const std::string& fname);
+bool writeStringToFile(const Slice& data, const std::string& fname);
 
-bool WriteStringToFileSync(const Slice& data, const std::string& fname);
+bool writeStringToFileSync(const Slice& data, const std::string& fname);
 
 void newWritableFile(std::string& file_name, WritableFile** result);
 

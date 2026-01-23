@@ -65,6 +65,46 @@ struct Options
   CompressionType compression = SnappyCompression;
 };
 
+// Options that control read operations
+struct ReadOptions
+{
+  // If true, all data read from underlying storage will be
+  // verified against corresponding checksums.
+  bool verify_checksums = false;
+
+  // Should the data read for this iteration be cached in memory?
+  // Callers may wish to set this field to false for bulk scans.
+  bool fill_cache = true;
+
+  // If "snapshot" is non-null, read as of the supplied snapshot
+  // (which must belong to the DB that is being read and which must
+  // not have been released).  If "snapshot" is null, use an implicit
+  // snapshot of the state at the beginning of this read operation.
+  const Snapshot* snapshot = nullptr;
+};
+
+// Options that control write operations
+struct WriteOptions
+{
+  WriteOptions() = default;
+
+  // If true, the write will be flushed from the operating system
+  // buffer cache (by calling WritableFile::Sync()) before the write
+  // is considered complete.  If this flag is true, writes will be
+  // slower.
+  //
+  // If this flag is false, and the machine crashes, some recent
+  // writes may be lost.  Note that if it is just the process that
+  // crashes (i.e., the machine does not reboot), no writes will be
+  // lost even if sync==false.
+  //
+  // In other words, a DB write with sync==false has similar
+  // crash semantics as the "write()" system call.  A DB write
+  // with sync==true has similar crash semantics to a "write()"
+  // system call followed by "fsync()".
+  bool sync = false;
+};
+
 }
 
 #endif

@@ -89,7 +89,7 @@ bool BloomPolicyFilter::keyMayMatch(const Slice& key, const Slice& filter) const
   return true;
 }
 
-FilterPolicy* BloomPolicyFilter()
+FilterPolicy* bloomPolicyFilter()
 {
   static FilterPolicy* policy = nullptr;
   if (policy == nullptr) policy = new class BloomPolicyFilter(10);

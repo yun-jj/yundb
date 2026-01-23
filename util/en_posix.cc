@@ -20,11 +20,11 @@ Env* Env::Default()
   return nullptr;
 }
 
-bool Env::RemoveFile(const std::string& fname)
-{return removeFile(fname);}
+bool Env::removeFile(const std::string& fname)
+{return doRemoveFile(fname);}
 
-bool Env::RenameFile(const std::string& src, const std::string& target)
-{return renameFile(src, target);}
+bool Env::renameFile(const std::string& src, const std::string& target)
+{return doRenameFile(src, target);}
 
 namespace
 {
@@ -223,7 +223,7 @@ void newRandomAccessFile(const std::string& file_name, RandomAccessFile** result
   return;
 }
 
-static bool removeFile(const std::string& fname)
+static bool doRemoveFile(const std::string& fname)
 {
   if (::unlink(fname.c_str()) != 0)
   {
@@ -233,13 +233,13 @@ static bool removeFile(const std::string& fname)
   return true;
 }
 
-bool WriteStringToFile(const Slice& data, const std::string& fname)
-{return DoWriteStringToFile(data, fname, false);}
+bool writeStringToFile(const Slice& data, const std::string& fname)
+{return doWriteStringToFile(data, fname, false);}
 
-bool WriteStringToFileSync(const Slice& data, const std::string& fname)
-{return DoWriteStringToFile(data, fname, true);}
+bool writeStringToFileSync(const Slice& data, const std::string& fname)
+{return doWriteStringToFile(data, fname, true);}
 
-static bool DoWriteStringToFile(const Slice& data, const std::string& fname,
+static bool doWriteStringToFile(const Slice& data, const std::string& fname,
                                 bool shouldSync)
 {
   WritableFile* file = nullptr;
@@ -255,7 +255,7 @@ static bool DoWriteStringToFile(const Slice& data, const std::string& fname,
   return true;
 }
 
-static bool renameFile(const std::string& src, const std::string& target)
+static bool doRenameFile(const std::string& src, const std::string& target)
 {
   if (std::rename(target.c_str(), target.c_str()) != 0)
   {

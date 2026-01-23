@@ -110,15 +110,15 @@ bool setCurrentFile(Env* env, const std::string& dbname,
 
   content.removePrefix(dbname.size() + 1);
   std::string tmp = generateTempFileName(descriptorNumber, dbname);
-  bool result = WriteStringToFileSync(content.toString() + "\n", tmp); 
+  bool result = writeStringToFileSync(content.toString() + "\n", tmp); 
 
   if (result)
   {
-    bool result = env->RenameFile(tmp, currentFileName(dbname));
+    bool result = env->renameFile(tmp, currentFileName(dbname));
 
     if (!result)
     {
-      env->RemoveFile(tmp);
+      env->removeFile(tmp);
       return false;
     }
   }

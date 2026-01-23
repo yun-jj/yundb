@@ -1,12 +1,13 @@
 #include "version_set.h"
 #include "util/file_name.h"
+#include "log_writer.h"
 
 #include <algorithm>
 
 namespace yundb
 {
 
-int FindFile(const std::shared_ptr<Comparator> cmp,
+int findFile(const std::shared_ptr<Comparator> cmp,
              const std::vector<std::shared_ptr<FileMeta>>& files,
              const Slice& key)
 {
@@ -26,6 +27,41 @@ int FindFile(const std::shared_ptr<Comparator> cmp,
     }
   }
   return right;
+}
+
+bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
+                           bool disjointSortedFiles,
+                           const std::vector<std::shared_ptr<FileMeta>>& files,
+                           const Slice* smallestUserKey,
+                           const Slice* largestUserKey)
+{
+  if (!disjointSortedFiles) {
+    // Need to check against all files
+    for (size_t i = 0; i < files.size(); i++) {
+      const auto& f = files[i];
+      if (afterFile(cmp, smallestUserKey, f) ||
+          beforeFile(cmp, largestUserKey, f)) {
+        // No overlap
+      } else {
+        return true;  // Overlap
+      }
+    }
+    return false;
+  }
+
+  // Binary search over file list
+  uint32_t index = 0;
+  if (smallestUserKey != nullptr) {
+    // Find the earliest possible internal key for smallest_user_key
+    index = findFile(cmp, files, *smallestUserKey);
+  }
+
+  if (index >= files.size()) {
+    // beginning of range is after all files, so no overlap.
+    return false;
+  }
+
+  return !beforeFile(cmp, largestUserKey, files[index]);
 }
 
 static size_t targetFileSize(const Options* options)
@@ -58,40 +94,7 @@ static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
   return (key != nullptr && cmp->cmp(*key, f->smallest) < 0);
 }
 
-bool SomeFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
-                           bool disjointSortedFiles,
-                           const std::vector<std::shared_ptr<FileMeta>>& files,
-                           const Slice* smallestUserKey,
-                           const Slice* largestUserKey)
-{
-  if (!disjointSortedFiles) {
-    // Need to check against all files
-    for (size_t i = 0; i < files.size(); i++) {
-      const auto& f = files[i];
-      if (afterFile(cmp, smallestUserKey, f) ||
-          beforeFile(cmp, largestUserKey, f)) {
-        // No overlap
-      } else {
-        return true;  // Overlap
-      }
-    }
-    return false;
-  }
 
-  // Binary search over file list
-  uint32_t index = 0;
-  if (smallestUserKey != nullptr) {
-    // Find the earliest possible internal key for smallest_user_key
-    index = FindFile(cmp, files, *smallestUserKey);
-  }
-
-  if (index >= files.size()) {
-    // beginning of range is after all files, so no overlap.
-    return false;
-  }
-
-  return !beforeFile(cmp, largestUserKey, files[index]);
-}
 
 Version::~Version()
 {
@@ -117,10 +120,11 @@ void Version::unRef()
 
   if (_ref == 0) delete this;
 }
+
 bool Version::overlapInLevel(int level, const Slice* smallestUserKey,
                              const Slice* largestUserKey)
 {
-  return SomeFileOverlapsRange(_versionSet->_comparator, (level > 0), _files[level],
+  return someFileOverlapsRange(_versionSet->_comparator, (level > 0), _files[level],
                                smallestUserKey, largestUserKey);
 }
 
@@ -352,10 +356,12 @@ void VersionSet::Builder::saveTo(Version* v)
 }
 
 VersionSet::VersionSet(const std::string dbName, const Options options,
-                       std::shared_ptr<Comparator> InternalComparator)
+                       std::shared_ptr<Comparator> InternalComparator,
+                       std::shared_ptr<TableCache> tableCache)
       : _dbName(dbName),
         _options(options), 
         _comparator(InternalComparator),
+        _tableCache(tableCache),
         _cur(nullptr),
         _dummyVersion(this) {}
 

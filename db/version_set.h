@@ -1,9 +1,6 @@
 #ifndef VERSION_SET_H
 #define VERSION_SET_H
 
-#include "yundb/en.h"
-#include "yundb/options.h"
-#include "log_writer.h"
 #include "dbformat.h"
 #include "version_edit.h"
 #include "util/sync.h"
@@ -12,13 +9,16 @@
 #include <vector>
 #include <array>
 
+class Writer;
+class TableCache;
+
 namespace yundb
 {
 
 // Return the smallest index i such that files[i]->largest >= key.
 // Return files.size() if there is no such file.
 // REQUIRES: "files" contains a sorted list of non-overlapping files.
-int FindFile(const std::shared_ptr<Comparator> cmp,
+int findFile(const std::shared_ptr<Comparator> cmp,
              const std::vector<std::shared_ptr<FileMeta>>& files,
              const Slice& key);
 
@@ -28,7 +28,7 @@ int FindFile(const std::shared_ptr<Comparator> cmp,
 // largest==nullptr represents a key largest than all keys in the DB.
 // REQUIRES: If disjoint_sorted_files, files[] contains disjoint ranges
 //           in sorted order.
-bool SomeFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
+bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
                            bool disjointSortedFiles,
                            const std::vector<std::shared_ptr<FileMeta>>& files,
                            const Slice* smallestUserKey,
@@ -53,7 +53,6 @@ class Version
   void ref();
   void unRef();
  private:
-
   explicit Version(VersionSet* versonSet)
       : _ref(0),
         _compactFileLevel(-1),
@@ -92,7 +91,8 @@ class VersionSet
 {
  public:
   VersionSet(const std::string dbName, const Options options,
-             std::shared_ptr<Comparator> internalComparator);
+             std::shared_ptr<Comparator> internalComparator,
+             std::shared_ptr<TableCache> tableCache);
   ~VersionSet();
   // Apply *edit to the current version to form a new descriptor that
   // is both saved to persistent state and installed as the new
@@ -152,6 +152,7 @@ class VersionSet
   uint64_t _logNumber;
   uint64_t _preLogNumber;
 
+  std::shared_ptr<TableCache> _tableCache;
   // Opened lazily
   WritableFile* _descriptorFile;
   Writer* _descriptorLog;

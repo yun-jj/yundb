@@ -22,7 +22,7 @@ class FilterPolicy
   virtual bool keyMayMatch(const Slice& key, const Slice& filter) const = 0;
 };
 
-FilterPolicy* BloomPolicyFilter();
+FilterPolicy* bloomPolicyFilter();
 
 }
 
