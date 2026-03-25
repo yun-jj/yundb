@@ -1,0 +1,20 @@
+// Copyright (c) 2011 The LevelDB Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file. See the AUTHORS file for names of contributors.
+//
+// Simple hash function used for internal data structures
+
+#ifndef YUNDB_UTIL_HASH_H
+#define YUNDB_UTIL_HASH_H
+// Header guard standardized to YUNDB_UTIL_HASH_H
+
+#include <cstddef>
+#include <cstdint>
+
+namespace yundb{
+
+uint32_t hash(const char* data, size_t n, uint32_t seed);
+
+}
+
+#endif // YUNDB_UTIL_HASH_H

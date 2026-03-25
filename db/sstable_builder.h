@@ -1,0 +1,38 @@
+#ifndef YUNDB_DB_SSTABLE_BUILDER_H
+#define YUNDB_DB_SSTABLE_BUILDER_H
+// Header guard standardized to YUNDB_DB_SSTABLE_BUILDER_H
+
+#include "yundb/en.h"
+#include "yundb/options.h"
+#include "filter_block_builder.h"
+#include "memtable.h"
+#include "block_builder.h"
+#include "table_format.h"
+
+namespace yundb
+{
+
+class SstableBuilder
+{
+ public:
+  SstableBuilder(Options& options, WritableFile* file);
+  SstableBuilder(SstableBuilder& other) = delete;
+  ~SstableBuilder();
+  // Builde sstable
+  void build(const MemTable* memtable);
+ private:
+  size_t writeBlock(std::string& block);
+  void writeRawBlock(const Slice& block, CompressionType type);
+  void flushBlock();
+  uint64_t _cur_block_position;
+  Options _options;
+  std::unique_ptr<WritableFile> _file;
+  BlockHandle _handle_builder;
+  FilterBlockBuilder _filter_block_builder;
+  DataBlockBuilder _data_block_builder;
+  DataBlockBuilder _index_block_builder;
+};
+
+}
+
+#endif // YUNDB_DB_SSTABLE_BUILDER_H
