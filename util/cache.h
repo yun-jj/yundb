@@ -28,6 +28,17 @@ class Cache
   void changeOptions(const Options& options);
 
  private:
+  void LRUInsert(LRUHandle** handle);
+  
+  void LRURemove(LRUHandle** handle);
+
+  void inUseInsert(LRUHandle** handle);
+
+  void inUseRemove(LRUHandle** handle);
+
+  void ref(LRUHandle** handle);
+
+  void unRef(LRUHandle** handle);
   Options _options;
 
   mutable std::mutex _mutex;
