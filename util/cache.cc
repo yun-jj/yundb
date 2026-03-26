@@ -46,7 +46,7 @@ class LRUTable
 
   ~LRUTable();
 
-  LRUHandle* lookup(const Slice& key, const size_t hash);
+  LRUHandle** lookup(const Slice& key, const size_t hash);
 
   LRUHandle* remove(size_t hashValue, const Slice& key);
 
@@ -85,7 +85,13 @@ Cache::~Cache()
 
 void* Cache::lookup(const Slice& key)
 {
+  std::lock_guard<std::mutex> lock(_mutex);
+  LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), 0xdeadbeef));
 
+  if (handle == nullptr) return nullptr;
+
+  ref(handle);
+  return (*handle)->value;
 }
 
 void Cache::insert(const Slice& key, void* value, size_t charge,
@@ -94,7 +100,7 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
 
 }
 
-void Cache::erase(const Slice& key)
+void Cache::unRef(const Slice& key)
 {
 
 }
@@ -171,11 +177,11 @@ LRUHandle** LRUTable::findPointer(const Slice& key, size_t hash)
   return ptr;
 }
 
-LRUHandle* LRUTable::lookup(const Slice& key, const size_t hash)
+LRUHandle** LRUTable::lookup(const Slice& key, const size_t hash)
 {
   LRUHandle** ptr = findPointer(key, hash);
   if (*ptr != nullptr)
-    return *ptr;
+    return ptr;
   return nullptr;
 }
 

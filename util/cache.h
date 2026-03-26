@@ -21,7 +21,7 @@ class Cache
   void insert(const Slice& key, void* value, size_t charge,
               void (*deleter)(const Slice& key, void* value));
 
-  void erase(const Slice& key);
+  void unRef(const Slice& key);
 
   size_t getUsage() const;
 
