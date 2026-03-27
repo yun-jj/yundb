@@ -76,7 +76,7 @@ Cache::Cache(const Options& options)
 
 Cache::~Cache()
 {
-  std::lock_guard<std::mutex> lock(_mutex);
+  _mutex.Lock();
   LRUHandle* handle = _lru.next;
   while (handle != &_lru)
   {
@@ -84,16 +84,18 @@ Cache::~Cache()
     freeLRUHandle(handle);
     handle = next;
   }
+  _mutex.Unlock();
 }
 
 void* Cache::lookup(const Slice& key)
 {
-  std::lock_guard<std::mutex> lock(_mutex);
+  _mutex.Lock();
   LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), HASHSEED));
 
   if (handle == nullptr) return nullptr;
 
   ref(handle);
+  _mutex.Unlock();
   return (*handle)->value;
 }
 
@@ -101,13 +103,15 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
                    void (*deleter)(const Slice& key, void* value))
 {
 
-  std::lock_guard<std::mutex> lock(_mutex);
   LRUHandle* handle = newLRUHandle(key, hash(key.data(), key.size(), HASHSEED),
                                    value, charge, deleter);
+  _mutex.Lock();
   _hashTable.insert(handle);
+  _mutex.Unlock();
   handle->inCache = true;
   handle->refs = 1;
   _usage += charge;
+  _mutex.Lock();
   LRUInsert(&handle);
 
    while (_usage > _capacity && _lru.next != &_lru)
@@ -118,18 +122,20 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
     _usage -= old->charge;
     freeLRUHandle(old);
   }
+  _mutex.Unlock();
 }
 
 void Cache::release(const Slice& key)
 {
-  std::lock_guard<std::mutex> lock(_mutex);
+  _mutex.Lock();
   LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), HASHSEED));
   if (handle != nullptr) rel(handle);
+  _mutex.Unlock();
 }
 
 void Cache::prune()
 {
-  std::lock_guard<std::mutex> lock(_mutex);
+  _mutex.Lock();
   LRUHandle* handle = _lru.next;
   while (handle != &_lru)
   {
@@ -139,12 +145,15 @@ void Cache::prune()
     freeLRUHandle(handle);
     handle = next;
   }
+  _mutex.Unlock();
 }
 
 size_t Cache::getUsage() const
 {
-  std::lock_guard<std::mutex> lock(_mutex);
-  return _usage;
+  _mutex.Lock();
+  size_t usage = _usage;
+  _mutex.Unlock();
+  return usage;
 }
 
 void Cache::changeOptions(const Options& options)

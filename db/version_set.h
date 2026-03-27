@@ -52,6 +52,7 @@ class Version
   int pickLevelForMemTableOutput(const Slice& smallestUserKey,
                                  const Slice& largestUserKey);
   void ref();
+
   void unRef();
  private:
   explicit Version(VersionSet* versonSet)

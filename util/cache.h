@@ -3,6 +3,7 @@
 // Header guard standardized to YUNDB_UTIL_CACHE_H
 
 #include "yundb/options.h"
+#include "sync.h"
 
 #include <mutex>
 
@@ -48,7 +49,7 @@ class Cache
 
   Options _options;
 
-  mutable std::mutex _mutex;
+  mutable sync::Mutex _mutex;;
 
   // Current memory usage of the cache
   size_t _usage;
