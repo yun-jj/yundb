@@ -16,12 +16,18 @@ class Cache
 
   ~Cache();
 
+  // Find the value of key. If found, it will increase the reference count and
+  // return the value. If not found, it will return nullptr.
   void* lookup(const Slice& key);
 
   void insert(const Slice& key, void* value, size_t charge,
               void (*deleter)(const Slice& key, void* value));
 
-  void unRef(const Slice& key);
+  // Decrease the reference count of key.
+  void release(const Slice& key);
+
+  // Remove all cache entries that in lru list
+  void prune(); 
 
   size_t getUsage() const;
 
@@ -38,7 +44,8 @@ class Cache
 
   void ref(LRUHandle** handle);
 
-  void unRef(LRUHandle** handle);
+  void rel(LRUHandle** handle);
+
   Options _options;
 
   mutable std::mutex _mutex;

@@ -8,9 +8,11 @@
 namespace yundb
 {
 
+constexpr uint32_t HASHSEED = 0xdeadbeef;
+
 struct LRUHandle;
 
-static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value,
+static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value, size_t charge,
                                void (*deleter)(const Slice& key, void* value));
 
 static void freeLRUHandle(LRUHandle* handle);
@@ -36,6 +38,7 @@ struct LRUHandle
   int refs;
   size_t hashValue;
   size_t keyLen;
+  size_t charge;
   char keyData[1];
 };
 
@@ -86,7 +89,7 @@ Cache::~Cache()
 void* Cache::lookup(const Slice& key)
 {
   std::lock_guard<std::mutex> lock(_mutex);
-  LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), 0xdeadbeef));
+  LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), HASHSEED));
 
   if (handle == nullptr) return nullptr;
 
@@ -98,11 +101,44 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
                    void (*deleter)(const Slice& key, void* value))
 {
 
+  std::lock_guard<std::mutex> lock(_mutex);
+  LRUHandle* handle = newLRUHandle(key, hash(key.data(), key.size(), HASHSEED),
+                                   value, charge, deleter);
+  _hashTable.insert(handle);
+  handle->inCache = true;
+  handle->refs = 1;
+  _usage += charge;
+  LRUInsert(&handle);
+
+   while (_usage > _capacity && _lru.next != &_lru)
+  {
+    LRUHandle* old = _lru.next;
+    LRURemove(&old);
+    _hashTable.remove(old->getHashValue(), old->getKey());
+    _usage -= old->charge;
+    freeLRUHandle(old);
+  }
 }
 
-void Cache::unRef(const Slice& key)
+void Cache::release(const Slice& key)
 {
+  std::lock_guard<std::mutex> lock(_mutex);
+  LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), HASHSEED));
+  if (handle != nullptr) rel(handle);
+}
 
+void Cache::prune()
+{
+  std::lock_guard<std::mutex> lock(_mutex);
+  LRUHandle* handle = _lru.next;
+  while (handle != &_lru)
+  {
+    LRUHandle* next = handle->next;
+    LRURemove(&handle);
+    _hashTable.remove(handle->getHashValue(), handle->getKey());
+    freeLRUHandle(handle);
+    handle = next;
+  }
 }
 
 size_t Cache::getUsage() const
@@ -119,7 +155,6 @@ void Cache::changeOptions(const Options& options)
 
 void Cache::LRUInsert(LRUHandle** handle)
 {
-  std::lock_guard<std::mutex> lock(_mutex);
   _lru.pre->next = *handle;
   (*handle)->pre = _lru.pre;
   _lru.pre = *handle;
@@ -128,14 +163,12 @@ void Cache::LRUInsert(LRUHandle** handle)
 
 void Cache::LRURemove(LRUHandle** handle)
 {
-  std::lock_guard<std::mutex> lock(_mutex);
   (*handle)->pre->next = (*handle)->next;
   (*handle)->next->pre = (*handle)->pre;
 }
 
 void Cache::inUseInsert(LRUHandle** handle)
 {
-  std::lock_guard<std::mutex> lock(_mutex);
   _inUse.pre->next = *handle;
   (*handle)->pre = _inUse.pre;
   _inUse.pre = *handle;
@@ -144,11 +177,30 @@ void Cache::inUseInsert(LRUHandle** handle)
 
 void Cache::inUseRemove(LRUHandle** handle)
 {
-  std::lock_guard<std::mutex> lock(_mutex);
   (*handle)->pre->next = (*handle)->next;
   (*handle)->next->pre = (*handle)->pre;
 }
 
+void Cache::ref(LRUHandle** handle)
+{
+  ++(*handle)->refs;
+  if (!(*handle)->inUse && (*handle)->refs >= 2 && (*handle)->inCache)
+  {
+    (*handle)->inUse = true;
+    inUseInsert(handle);
+  }
+}
+
+void Cache::rel(LRUHandle** handle)
+{
+  --(*handle)->refs;
+  if ((*handle)->refs == 1 && (*handle)->inCache && (*handle)->inUse)
+  {
+    (*handle)->inUse = false;
+    inUseRemove(handle);
+    LRUInsert(handle);
+  }
+}
 
 LRUTable::LRUTable() : elems(0), _buckets(4, nullptr) {}
 
@@ -197,24 +249,6 @@ LRUHandle* LRUTable::remove(size_t hashValue, const Slice& key)
   }
   return nullptr;
 }
-void LRUTable::insert(LRUHandle* handle)
-{
-  LRUHandle** ptr = findPointer(handle->getKey(), handle->getHashValue());
-  if (*ptr != nullptr)
-  {
-    handle->nextHash = (*ptr)->nextHash;
-    *ptr = handle;
-    ++elems;
-  }
-  else
-  {
-    handle->nextHash = *ptr;
-    *ptr = handle;
-    ++elems;
-  }
-
-  if (elems >= _buckets.size() * 4) resize();
-}
 
 void LRUTable::insert(LRUHandle* handle)
 {
@@ -234,6 +268,7 @@ void LRUTable::insert(LRUHandle* handle)
 
   if (elems >= _buckets.size() * 4) resize();
 }
+
 
 void LRUTable::resize()
   {
@@ -253,7 +288,7 @@ void LRUTable::resize()
     _buckets.swap(newBuckets);
   }
 
-static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value,
+static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value, size_t charge,
                                void (*deleter)(const Slice& key, void* value))
 {
   size_t keyLen = key.size();
@@ -263,6 +298,7 @@ static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value,
   handle->deleter = deleter;
   handle->hashValue = hash;
   handle->keyLen = keyLen;
+  handle->charge = charge;
   handle->refs = 0;
   handle->inUse = false;
   handle->inCache = false;
@@ -275,33 +311,6 @@ static void freeLRUHandle(LRUHandle* handle)
   if (handle->deleter != nullptr)
     handle->deleter(handle->getKey(), handle->value);
   delete[] reinterpret_cast<char*>(handle);
-}
-
-void Cache::ref(LRUHandle** handle)
-{
-  ++(*handle)->refs;
-  if (!(*handle)->inUse && (*handle)->refs >= 2 && (*handle)->inCache)
-  {
-    (*handle)->inUse = true;
-    inUseInsert(handle);
-  }
-}
-
-void Cache::unRef(LRUHandle** handle)
-{
-  --(*handle)->refs;
-  if ((*handle)->refs == 1 && (*handle)->inCache && (*handle)->inUse)
-  {
-    (*handle)->inUse = false;
-    inUseRemove(handle);
-    LRUInsert(handle);
-  }
-
-  if ((*handle)->refs <= 0 && (*handle)->inCache)
-  {
-    (*handle)->inCache = false;
-    LRURemove(handle);
-  }
 }
 
 }
