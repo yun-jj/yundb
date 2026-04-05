@@ -1,6 +1,5 @@
 #include "version_set.h"
 #include "util/file_name.h"
-#include "log_writer.h"
 
 #include <algorithm>
 
@@ -94,8 +93,6 @@ static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
   return (key != nullptr && cmp->cmp(*key, f->smallest) < 0);
 }
 
-
-
 Version::~Version()
 {
   _pre->_next = _next;
@@ -105,7 +102,7 @@ Version::~Version()
 void Version::ref()
 {++_ref;}
 
-void Version::unRef()
+bool Version::unRef()
 {
   CERR_PRINT_WITH_CONDITIONAL(
     "Version: ref <= 0",
@@ -118,7 +115,13 @@ void Version::unRef()
   );
   _ref--;
 
-  if (_ref == 0) delete this;
+  if (_ref == 0)
+  {
+    delete this;
+    return true;
+  }
+
+  return false;
 }
 
 bool Version::overlapInLevel(int level, const Slice* smallestUserKey,
@@ -306,7 +309,6 @@ void VersionSet::Builder::apply(VersionEdit* edit)
     _deleteFiles[level].erase(pair.second->number);
     _addedFiles[level].insert(pair.second);
   }
-
 }
 
 void VersionSet::Builder::saveTo(Version* v)
@@ -425,7 +427,7 @@ void VersionSet::appendVersion(Version* version)
   version->_next->_pre = version;
 }
 
-void VersionSet::saveSnapshot(Writer* log)
+void VersionSet::saveSnapshot(log::Writer* log)
 {
   VersionEdit edit;
   edit.setComparatorName(_comparator->name());
@@ -488,7 +490,7 @@ bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
     newManifestFile = generateDescriptorFileName(_manifestFileNumber, _dbName);
     newWritableFile(newManifestFile, &_descriptorFile);
     // Writer need crc code
-    _descriptorLog = new Writer(_descriptorFile);
+    _descriptorLog = new log::Writer(_descriptorFile);
     saveSnapshot(_descriptorLog);
   }
 

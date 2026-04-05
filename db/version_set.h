@@ -5,12 +5,12 @@
 #include "dbformat.h"
 #include "version_edit.h"
 #include "util/sync.h"
+#include "log_writer.h"
 
 #include <memory>
 #include <vector>
 #include <array>
 
-class Writer;
 class TableCache;
 
 namespace yundb
@@ -53,7 +53,9 @@ class Version
                                  const Slice& largestUserKey);
   void ref();
 
-  void unRef();
+  // Return false if the reference count has already dropped to zero, and deletes this.
+  // otherwise return true.
+  bool unRef();
  private:
   explicit Version(VersionSet* versonSet)
       : _ref(0),
@@ -74,7 +76,7 @@ class Version
   int _ref;
   // Next compact file and level
   int _compactFileLevel;
-  FileMeta * _compactFile;
+  FileMeta* _compactFile;
   // Level that should be compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by VersionSet::Finalize().
@@ -139,7 +141,7 @@ class VersionSet
 
   void appendVersion(Version* version);
 
-  void saveSnapshot(Writer* log);
+  void saveSnapshot(log::Writer* log);
 
   class Builder;
   friend class Version;
@@ -157,7 +159,7 @@ class VersionSet
   std::shared_ptr<TableCache> _tableCache;
   // Opened lazily
   WritableFile* _descriptorFile;
-  Writer* _descriptorLog;
+  log::Writer* _descriptorLog;
   // Cur version
   Version* _cur;
   // node<->node<-.......node<->dummy

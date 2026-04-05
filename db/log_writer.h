@@ -11,6 +11,9 @@ class WritableFile;
 namespace yundb
 {
 
+namespace log
+{
+
 class Writer
 {
  public:
@@ -24,9 +27,14 @@ class Writer
   ~Writer() = default;
   void appendRecord(const Slice& record);
  private:
+  void emitPhysicalRecord(const char* data, RecordType type, size_t length);
+  void initTypeCrc();
   std::unique_ptr<WritableFile> _dest;
   size_t _block_offset;
+  uint32_t _type_crc[maxRecordType + 1];
 };
+
+}
 
 }
 

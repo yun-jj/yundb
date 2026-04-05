@@ -63,7 +63,6 @@ class VersionEdit
     _deleteFiles.insert(std::make_pair(level, fileNumber));
   }
 
-
   void setComparatorName(std::string name)
   {
     CERR_PRINT_WITH_CONDITIONAL(

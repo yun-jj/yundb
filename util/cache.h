@@ -25,7 +25,7 @@ class Cache
               void (*deleter)(const Slice& key, void* value));
 
   // Decrease the reference count of key.
-  void release(const Slice& key);
+  void unRef(const Slice& key);
 
   // Remove all cache entries that in lru list
   void prune(); 
@@ -45,7 +45,7 @@ class Cache
 
   void ref(LRUHandle** handle);
 
-  void rel(LRUHandle** handle);
+  void unRef(LRUHandle** handle);
 
   Options _options;
 

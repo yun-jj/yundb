@@ -125,11 +125,11 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
   _mutex.Unlock();
 }
 
-void Cache::release(const Slice& key)
+void Cache::unRef(const Slice& key)
 {
   _mutex.Lock();
   LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), HASHSEED));
-  if (handle != nullptr) rel(handle);
+  if (handle != nullptr) unRef(handle);
   _mutex.Unlock();
 }
 
@@ -200,7 +200,7 @@ void Cache::ref(LRUHandle** handle)
   }
 }
 
-void Cache::rel(LRUHandle** handle)
+void Cache::unRef(LRUHandle** handle)
 {
   --(*handle)->refs;
   if ((*handle)->refs == 1 && (*handle)->inCache && (*handle)->inUse)
