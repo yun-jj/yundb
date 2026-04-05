@@ -39,6 +39,7 @@ class Slice
   const char* begin() const {return data();}
   const char* end() const {return data() + size();}
   bool empty() const {return (_size == 0);}
+  void clear() {_str = nullptr; _size = 0;}
 
   std::string toString() const {return std::string(_str, _size);}
 

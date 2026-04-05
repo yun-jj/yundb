@@ -22,7 +22,15 @@ class SequentialFile
   SequentialFile& operator=(const SequentialFile& other) = delete;
   virtual ~SequentialFile() = default;
   virtual void skip(uint64_t n) = 0;
-  virtual bool read( Slice* str, uint64_t bytes) = 0;
+  // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
+  // written by this routine.  Sets "*result" to the data that was
+  // read (including if fewer than "n" bytes were successfully read).
+  // May set "*result" to point at data in "scratch[0..n-1]", so
+  // "scratch[0..n-1]" must be live when "*result" is used.
+  // If an error was encountered, returns a non-OK status.
+  //
+  // REQUIRES: External synchronization
+  virtual bool read(Slice* str, char* scratch, uint64_t bytes) = 0;
 };
 
 /* Random read a file */
@@ -34,7 +42,16 @@ class RandomAccessFile
   RandomAccessFile& operator=(const RandomAccessFile& other) = delete;
   virtual ~RandomAccessFile() = default;
   virtual size_t fileSize() const = 0;
-  virtual bool read(uint64_t offset, Slice* str, uint64_t bytes) = 0;
+  // Read up to "n" bytes from the file starting at "offset".
+  // "scratch[0..n-1]" may be written by this routine.  Sets "*result"
+  // to the data that was read (including if fewer than "n" bytes were
+  // successfully read).  May set "*result" to point at data in
+  // "scratch[0..n-1]", so "scratch[0..n-1]" must be live when
+  // "*result" is used.  If an error was encountered, returns a non-OK
+  // status.
+  //
+  // Safe for concurrent use by multiple threads.
+  virtual bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) = 0;
 };
 
 /* A writable file abstract */
