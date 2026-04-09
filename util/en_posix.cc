@@ -29,6 +29,65 @@ bool Env::renameFile(const std::string& src, const std::string& target)
 namespace
 {
 
+class SequentialPosixFile final : public SequentialFile
+{
+ public:
+  SequentialPosixFile(std::string fileName, int fd)
+      : _filename(std::move(fileName)),
+        _fd(fd) {}
+  ~SequentialPosixFile() override {close(_fd);}
+
+  bool skip(uint64_t n) override
+  {
+    if (::lseek(_fd, n, SEEK_CUR) == static_cast<off_t>(-1))
+    {
+      std::cerr << "SequentialPosixFile: skip file: " << _filename << "fail\n";
+      return false;
+    }
+    return true;
+  }
+
+  bool read(Slice* str, char* scratch, uint64_t bytes) override
+  {
+    while (true)
+    {
+      ssize_t readSize = ::read(_fd, scratch, bytes);
+      if (readSize < 0)
+      {
+        if (errno == EINTR) continue;
+        std::cerr << "SequentialPosixFile: read file: " << _filename << "fail\n";
+        return false;
+      }
+      *str = Slice(scratch, static_cast<size_t>(bytes));
+      break;
+    }
+    return true;
+  }
+ private:
+  const int _fd;
+  const std::string _filename;
+};
+
+class RandomAccessPosixFile final : public RandomAccessFile
+{
+ public:
+  RandomAccessPosixFile(int fd, std::string fileName)
+      : _fd(fd), _fileName(std::move(fileName)) {}
+  ~RandomAccessPosixFile() override {close(_fd);}
+
+  size_t fileSize() const override
+  {
+    
+  }
+
+  bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) override
+  {
+  
+  }
+ private:
+  int _fd;
+  const std::string _fileName;
+};
 
 class WritablePosixFile final : public WritableFile
 {
@@ -117,14 +176,13 @@ class WritablePosixFile final : public WritableFile
   char _buf[PosixWritableBufferSize];
 };
 
-class RandomAccessPosixFile final : public RandomAccessFile 
+class MmapReadablePosixFile final : public RandomAccessFile 
 {
  public:
-  RandomAccessPosixFile(int fd, std::string fileName) 
+  MmapReadablePosixFile(int fd, std::string fileName) 
         : _fd(fd),
           _file_name(fileName)
   {
-
     struct stat fileStat;
 
     if (::fstat(_fd, &fileStat) == -1)
@@ -151,29 +209,31 @@ class RandomAccessPosixFile final : public RandomAccessFile
     }
   }
 
-  ~RandomAccessPosixFile(){close();}
+  ~MmapReadablePosixFile() {close();}
 
-  bool read(uint64_t offset, Slice* str, uint64_t bytes) override
+  bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) override
   {
-    if (str == nullptr)
-    {
-      CERR_PRINT("RandomAccessPosixFile: None str");
-      return false;
-    }
 
-    if (str->size() < bytes)
-    {
-      CERR_PRINT("RandomAccessPosixFile: dst space too short to fill");
-      return false;
-    }
+    CERR_PRINT_WITH_CONDITIONAL(
+      "RandomAccessPosixFile: None str",
+      str == nullptr
+    );
+    CERR_PRINT_WITH_CONDITIONAL(
+      "RandomAccessPosixFile: None scratch",
+      scratch == nullptr
+    );
+    CERR_PRINT_WITH_CONDITIONAL(
+      "RandomAccessPosixFile: dst space too short to fill",
+      str->size() < bytes
+    );
 
-    char* dst = const_cast<char*>(str->data());
-    if (std::strncpy(dst, _data + offset, static_cast<size_t>(bytes)) != 0)
+    if (std::strncpy(scratch, _data + offset, static_cast<size_t>(bytes)) != 0)
     {
       CERR_PRINT("RandomAccessPosixFile: copy error");
       return false;
     }
 
+    *str = Slice(scratch, static_cast<size_t>(bytes));
     return true;
   }
 
@@ -238,6 +298,24 @@ bool writeStringToFile(const Slice& data, const std::string& fname)
 
 bool writeStringToFileSync(const Slice& data, const std::string& fname)
 {return doWriteStringToFile(data, fname, true);}
+
+bool readFileToString(const std::string& fname, std::string* data)
+{
+  data->clear();
+  SequentialFile* file = nullptr;
+  if (file == nullptr)
+  {
+    CERR_PRINT("readFileToString: open file fail");
+    return false;
+  }
+
+  char buf[8192] = {0};
+
+  while (true)
+  {
+
+  }
+}
 
 static bool doWriteStringToFile(const Slice& data, const std::string& fname,
                                 bool shouldSync)

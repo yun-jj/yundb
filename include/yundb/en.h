@@ -21,7 +21,7 @@ class SequentialFile
   SequentialFile(const SequentialFile& other) = delete;
   SequentialFile& operator=(const SequentialFile& other) = delete;
   virtual ~SequentialFile() = default;
-  virtual void skip(uint64_t n) = 0;
+  virtual bool skip(uint64_t n) = 0;
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
   // written by this routine.  Sets "*result" to the data that was
   // read (including if fewer than "n" bytes were successfully read).
@@ -51,7 +51,8 @@ class RandomAccessFile
   // status.
   //
   // Safe for concurrent use by multiple threads.
-  virtual bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) = 0;
+  virtual bool read(uint64_t offset, Slice* str,
+                    char* scratch, uint64_t bytes) = 0;
 };
 
 /* A writable file abstract */
@@ -89,6 +90,8 @@ class Env
 bool writeStringToFile(const Slice& data, const std::string& fname);
 
 bool writeStringToFileSync(const Slice& data, const std::string& fname);
+
+bool readFileToString(const std::string& fname, std::string* data);
 
 void newWritableFile(std::string& file_name, WritableFile** result);
 

@@ -74,10 +74,10 @@ class Version
   friend class VersionSet;
 
   int _ref;
-  // Next compact file and level
+  // Next compact file and level based on seek stats.
   int _compactFileLevel;
   FileMeta* _compactFile;
-  // Level that should be compacted next and its compaction score.
+  // Level that should be size compacted next and its compaction score.
   // Score < 1 means compaction is not strictly needed.  These fields
   // are initialized by VersionSet::Finalize().
   double _compactionScore;
@@ -104,6 +104,8 @@ class VersionSet
   // REQUIRES: *mu is held on entry.
   // REQUIRES: no other thread concurrently calls LogAndApply()
   bool logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept;
+
+  void addLiveFiles(std::set<uint64_t>& liveFiles) const;
 
   // Return current version
   Version* current() {return _cur;}

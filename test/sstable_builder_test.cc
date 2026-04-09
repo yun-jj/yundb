@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#define TEST_TEMP_DIR "./tmp"
+
 class SstableBuilderTest : public testing::Test
 {
  public:

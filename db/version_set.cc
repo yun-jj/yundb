@@ -517,6 +517,18 @@ bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
   return true;
 }
 
+void VersionSet::addLiveFiles(std::set<uint64_t>& liveFiles) const
+{
+  for (Version* v = _dummyVersion._next; v != &_dummyVersion; v = v->_next)
+  {
+    for (int level = 0; MaxFileLevel > level; level++)
+    {
+      for (const auto& f : v->_files[level])
+        liveFiles.insert(f->number);
+    }
+  }
+}
+
 static uint64_t maxBytesForLevel(int level)
 {
   // Init for 10 MB
