@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <memory>
+#include <atomic>
 
 #include "util/error_print.h"
 #include "yundb/en.h"
@@ -28,6 +29,43 @@ bool Env::renameFile(const std::string& src, const std::string& target)
 
 namespace
 {
+
+class ResourceLimiter
+{
+ public:
+  ResourceLimiter(int maxResource) : 
+#ifndef NDEBUG
+      _maxResource(maxResource),
+#endif
+      _resource(maxResource)
+  {assert(maxResource >= 0);}
+
+  bool acquire()
+  {
+    int oldValue = _resource.fetch_sub(1);
+
+    if (oldValue > 0) return true;
+    int preValue = _resource.fetch_add(1);
+    // Silence compiler warning
+    (void)preValue;
+    // If the check below fails, Release() was called more times than acquire.
+    assert(preValue < _maxResource);
+    return false;
+  }
+
+  void release()
+  {
+    int oldValue = _resource.fetch_add(1);
+    // Silence compiler warning
+    (void)oldValue;
+    assert(oldValue < _maxResource);
+  }
+ private:
+#ifndef NDEBUG
+  const int _maxResource;
+#endif
+  std::atomic<int> _resource;
+};
 
 class SequentialPosixFile final : public SequentialFile
 {
@@ -68,6 +106,11 @@ class SequentialPosixFile final : public SequentialFile
   const std::string _filename;
 };
 
+// Implements random read access in a file using pread().
+//
+// Instances of this class are thread-safe, as required by the RandomAccessFile
+// API. Instances are immutable and Read() only calls thread-safe library
+// functions.
 class RandomAccessPosixFile final : public RandomAccessFile
 {
  public:
@@ -75,17 +118,13 @@ class RandomAccessPosixFile final : public RandomAccessFile
       : _fd(fd), _fileName(std::move(fileName)) {}
   ~RandomAccessPosixFile() override {close(_fd);}
 
-  size_t fileSize() const override
-  {
-    
-  }
-
   bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) override
   {
   
   }
  private:
   int _fd;
+  ResourceLimiter* _limiter;
   const std::string _fileName;
 };
 
@@ -237,7 +276,7 @@ class MmapReadablePosixFile final : public RandomAccessFile
     return true;
   }
 
-  size_t fileSize() const override
+  size_t fileSize() const
   {return _file_size;}
 
   void close()
