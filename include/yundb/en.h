@@ -83,15 +83,21 @@ class Env
 
   virtual bool renameFile(const std::string& src, const std::string& target);
 
+  virtual void newWritableFile(std::string& file_name, WritableFile** result);
+
+  virtual void newRandomAccessFile(std::string& file_name, RandomAccessFile** result);
+
   static Env* Default();
 };
 
+// Temp put here
 bool writeStringToFile(const Slice& data, const std::string& fname);
 
 bool writeStringToFileSync(const Slice& data, const std::string& fname);
 
 bool readFileToString(const std::string& fname, std::string* data);
 
+// The following functions in future will add in Env class, but now we just put them here for simplicity
 void newWritableFile(std::string& file_name, WritableFile** result);
 
 void newRandomAccessFile(std::string& file_name, RandomAccessFile** result);
