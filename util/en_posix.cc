@@ -36,6 +36,8 @@ bool Env::renameFile(const std::string& src, const std::string& target)
 namespace
 {
 
+// Limte the number of open file descriptors and the mmap file usage
+// so that we do not run out of file descriptors or virtual memory
 class ResourceLimiter
 {
  public:
@@ -76,38 +78,64 @@ class ResourceLimiter
 class SequentialPosixFile final : public SequentialFile
 {
  public:
-  SequentialPosixFile(std::string fileName, int fd)
-      : _filename(std::move(fileName)),
-        _fd(fd) {}
-  ~SequentialPosixFile() override {::close(_fd);}
+  SequentialPosixFile(std::string fileName, int fd, 
+                      std::shared_ptr<ResourceLimiter> limiter)
+      : _limiter(std::move(limiter)),
+        _permanentFd(limiter == nullptr ? true : limiter->acquire()), 
+        _filename(std::move(fileName)),
+        _fd(_permanentFd ? fd : -1) {}
+  ~SequentialPosixFile() override
+  {
+    if (_permanentFd)
+    {
+      if (_limiter != nullptr) _limiter->release();
+      if (::close(_fd) < 0)
+        std::cerr << "SequentialPosixFile: close file: " << _filename << "fail\n";
+    }
+  }
 
   bool skip(uint64_t n) override
   {
-    if (::lseek(_fd, n, SEEK_CUR) == static_cast<off_t>(-1))
-    {
-      std::cerr << "SequentialPosixFile: skip file: " << _filename << "fail\n";
-      return false;
-    }
+    _offset += static_cast<off_t>(n);
     return true;
   }
 
   bool read(Slice* str, char* scratch, uint64_t bytes) override
   {
+    int fd = _fd;
+
+    if (!_permanentFd)
+    {
+      fd = ::open(_filename.c_str(), O_RDONLY | OpenBaseFlags);
+      if (fd < 0)
+      {
+        std::cerr << "SequentialPosixFile: open file: " << _filename << "fail\n";
+        return false;
+      }
+    }
+
     while (true)
     {
-      ssize_t readSize = ::read(_fd, scratch, bytes);
+      ssize_t readSize = ::pread(fd, scratch, bytes, _offset);
+
       if (readSize < 0)
       {
         if (errno == EINTR) continue;
         std::cerr << "SequentialPosixFile: read file: " << _filename << "fail\n";
         return false;
       }
+      _offset += static_cast<off_t>(readSize);
       *str = Slice(scratch, static_cast<size_t>(bytes));
       break;
     }
+    if (::close(fd) < 0)
+      std::cerr << "SequentialPosixFile: close file: " << _filename << "fail\n";
     return true;
   }
  private:
+  std::shared_ptr<ResourceLimiter> _limiter;
+  bool _permanentFd;
+  off_t _offset;
   const int _fd;
   const std::string _filename;
 };
@@ -120,8 +148,9 @@ class SequentialPosixFile final : public SequentialFile
 class RandomAccessPosixFile final : public RandomAccessFile
 {
  public:
-  RandomAccessPosixFile(int fd, std::string fileName, ResourceLimiter* limiter)
-    :   _limiter(limiter),
+  RandomAccessPosixFile(std::string fileName, int fd,
+                        std::shared_ptr<ResourceLimiter> limiter)
+    :   _limiter(std::move(limiter)),
         _permanentFd(limiter == nullptr ? true : limiter->acquire()),
         _fileName(std::move(fileName)),
         _fd(_permanentFd ? fd : -1) {}
@@ -131,7 +160,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
     if (_permanentFd)
     {
       if (_limiter != nullptr) _limiter->release();
-      ::close(_fd);
+      if (::close(_fd) < 0)
+        std::cerr << "RandomAccessPosixFile: close file: " << _fileName << "fail\n";
     }
   }
 
@@ -145,7 +175,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
       int fd = ::open(_fileName.c_str(), O_RDONLY | OpenBaseFlags);
       assert(fd >= 0);
       result = doRead(fd, static_cast<off_t>(offset), str, scratch, bytes);
-      ::close(fd);
+      if (::close(fd) < 0)
+        std::cerr << "RandomAccessPosixFile: close file: " << _fileName << "fail\n";
     }
 
     return result;
@@ -160,7 +191,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
       {
         if (errno == EINTR) continue;
         std::cerr << "RandomAccessPosixFile: read file: " << _fileName << "fail\n";
-        ::close(fd);
+        if (::close(fd) < 0)
+          std::cerr << "RandomAccessPosixFile: close file: " << _fileName << "fail\n";
         return false;
       }
       *str = Slice(scratch, static_cast<size_t>(bytes));
@@ -179,8 +211,13 @@ class RandomAccessPosixFile final : public RandomAccessFile
 class WritablePosixFile final : public WritableFile
 {
  public:
-  WritablePosixFile(int fd, std::string filename)
-    : _fd(fd), _filename(filename) {}
+  WritablePosixFile(std::string filename, int fd,
+                    std::shared_ptr<ResourceLimiter> limiter)
+      : _limiter(std::move(limiter)),
+        _permanentFd(limiter == nullptr ? true : limiter->acquire()),
+        _closed(false),
+        _fd(_permanentFd ? fd : -1), 
+        _filename(filename) {}
 
   ~WritablePosixFile() override {close();}
 
@@ -217,12 +254,22 @@ class WritablePosixFile final : public WritableFile
   // close file
   void close() override
   {
-    if (_fd > 0)
+    if (!_closed)
     {
-      if (::close(_fd) == 0)
-        _fd = -1;
-      else
-        std::clog << "close file: " << _filename << "fail\n";
+      if (_permanentFd)
+      {
+        if (::close(_fd) == 0)
+        {
+          _fd = -1;
+          _limiter->release();
+        }
+        else
+        {
+          std::cerr << "close file: " << _filename << "fail\n";
+          return;
+        }
+      }
+    _closed = true;
     }
   }
 
@@ -230,33 +277,62 @@ class WritablePosixFile final : public WritableFile
   void sync() override
   {
     writeUnbuffer(_buf, _pos);
+    if (!_permanentFd) return;
 #if HAVE_PDATASYNC
     bool success = ::fdatasync(_fd) == 0;
 #else
     bool success = ::fsync(_fd) == 0;
 #endif
     if (!success)
-      std::clog << "sync file: " << _filename << "fail\n";
+      std::cerr << "sync file: " << _filename << "fail\n";
   }
  private:
   void writeUnbuffer(const char* data, size_t size)
   {
+    if (_closed)
+    {
+      std::cerr << "WritablePosixFile: append file: " << _filename << "fail, file already closed\n";
+      return;
+    }
+
+    int fd = _fd;
+    if (!_permanentFd)
+    {
+      fd = ::open(_filename.c_str(),
+                  O_APPEND | O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
+      if (fd < 0)
+      {
+        std::cerr << "open file: " << _filename << "fail\n";
+        return;
+      }
+    }
+
     while (size > 0)
     {
-     ssize_t write_result = ::write(_fd, data, size);
-     if (write_result < 0)
-     {
-      if (errno == EINTR)
-        continue;
-      else
-        std::clog << "write file: " << _filename << "fail\n";
-     }
+      ssize_t write_result = ::write(fd, data, size);
+      if (write_result < 0)
+      {
+          if (errno == EINTR) {
+            continue;
+          } else {
+            std::cerr << "write file: " << _filename << "fail\n";
+          }
+      }
 
-     size -= write_result;
-     data += write_result;
-    }
+      size -= write_result;
+      data += write_result;
+      }
+
+      if (!_permanentFd)
+      {
+        if (::close(fd) != 0)
+          std::cerr << "close file: " << _filename << "fail\n";
+      }
   }
 
+  std::shared_ptr<ResourceLimiter> _limiter;
+  bool _permanentFd;
+  bool _closed;
   int _fd;
   size_t _pos;
   const std::string _filename;
@@ -266,7 +342,7 @@ class WritablePosixFile final : public WritableFile
 class MmapReadablePosixFile final : public RandomAccessFile 
 {
  public:
-  MmapReadablePosixFile(int fd, std::string fileName) 
+  MmapReadablePosixFile(std::string fileName, int fd) 
         : _fd(fd),
           _file_name(fileName)
   {
@@ -275,7 +351,9 @@ class MmapReadablePosixFile final : public RandomAccessFile
     if (::fstat(_fd, &fileStat) == -1)
     {
       std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: fstat error\n";
-      ::close(_fd);
+      if (::close(_fd) < 0)
+        std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: close error\n";
+      
     }
 
     _file_size = fileStat.st_size;
@@ -292,7 +370,8 @@ class MmapReadablePosixFile final : public RandomAccessFile
     if (_data == MAP_FAILED)
     {
       std::cerr <<"MmapReadablePosixFile: RandomAccessPosixFile: mmap error\n";
-      ::close(_fd);
+      if (::close(_fd) < 0)
+        std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: close error\n";
     }
   }
 
@@ -325,7 +404,8 @@ class MmapReadablePosixFile final : public RandomAccessFile
   {
     char* tmp = const_cast<char*>(_data);
     ::munmap(reinterpret_cast<void*>(tmp), _file_size);
-    ::close(_fd);
+    if (::close(_fd) < 0)
+      std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: close error\n";
   }
 
  private:
