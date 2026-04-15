@@ -165,7 +165,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
     }
   }
 
-  bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) override
+  bool read(uint64_t offset, Slice* str,
+            char* scratch, uint64_t bytes) const override
   {
     bool result = false;
 
@@ -182,7 +183,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
     return result;
   }
  private:
-  bool doRead(int fd, off_t offset, Slice* str, char* scratch, uint64_t bytes)
+  bool doRead(int fd, off_t offset, Slice* str,
+              char* scratch, uint64_t bytes) const
   {
     while (true)
     {
@@ -217,7 +219,7 @@ class WritablePosixFile final : public WritableFile
         _permanentFd(limiter == nullptr ? true : limiter->acquire()),
         _closed(false),
         _fd(_permanentFd ? fd : -1), 
-        _filename(filename) {}
+        _filename(std::move(filename)) {}
 
   ~WritablePosixFile() override {close();}
 
@@ -338,112 +340,115 @@ class WritablePosixFile final : public WritableFile
   const std::string _filename;
   char _buf[PosixWritableBufferSize];
 };
+// Limite virtual memory usage by mmap()
 
-class MmapReadablePosixFile final : public RandomAccessFile 
+// Implements random read access in a file using mmap().
+//
+// Instances of this class are thread-safe, as required by the RandomAccessFile
+// API. Instances are immutable and Read() only calls thread-safe library
+// functions.
+class MmapReadablePosixFile final : public RandomAccessFile
 {
  public:
-  MmapReadablePosixFile(std::string fileName, int fd) 
-        : _fd(fd),
-          _file_name(fileName)
+  // mmap_base[0, length-1] points to the memory-mapped contents of the file. It
+  // must be the result of a successful call to mmap(). This instances takes
+  // over the ownership of the region.
+  //
+  // |mmap_limiter| must outlive this instance. The caller must have already
+  // acquired the right to use one mmap region, which will be released when this
+  // instance is destroyed.
+  MmapReadablePosixFile(std::string fileName, char* mmapBase, size_t length,
+                        std::shared_ptr<ResourceLimiter> mmapLimiter)
+      : _mmapBase(mmapBase),
+        _length(length),
+        _mmapLimiter(std::move(mmapLimiter)),
+        _fileName(std::move(fileName)) {}
+
+  ~MmapReadablePosixFile() override
   {
-    struct stat fileStat;
-
-    if (::fstat(_fd, &fileStat) == -1)
-    {
-      std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: fstat error\n";
-      if (::close(_fd) < 0)
-        std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: close error\n";
-      
-    }
-
-    _file_size = fileStat.st_size;
-
-    _data = static_cast<char*>(
-      ::mmap(
-        nullptr,
-        _file_size,
-        PROT_READ,
-        MAP_PRIVATE,
-        fd, 0
-      ));
-      
-    if (_data == MAP_FAILED)
-    {
-      std::cerr <<"MmapReadablePosixFile: RandomAccessPosixFile: mmap error\n";
-      if (::close(_fd) < 0)
-        std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: close error\n";
-    }
+    ::munmap(static_cast<void*>(_mmapBase), _length);
+    if (_mmapLimiter != nullptr) _mmapLimiter->release();
   }
 
-  ~MmapReadablePosixFile() {close();}
-
-  bool read(uint64_t offset, Slice* str, char* scratch, uint64_t bytes) override
+  bool read(uint64_t offset, Slice* str, 
+            char* scratch, uint64_t bytes) const override
   {
-
-    if (str == nullptr)
-      std::cerr << "RandomAccessPosixFile: None str\n";
-    if (scratch == nullptr)
-      std::cerr << "RandomAccessPosixFile: None scratch\n";
-    if (str != nullptr && str->size() < bytes)
-      std::cerr << "RandomAccessPosixFile: dst space too short to fill\n";
-
-    if (std::strncpy(scratch, _data + offset, static_cast<size_t>(bytes)) != 0)
+    if (offset + bytes > _length)
     {
-      std::cerr << "RandomAccessPosixFile: copy error\n"; 
+      *str = Slice();
+      std::cerr << "MmapReadablePosixFile: read file: " <<
+      _fileName << "fail, offset + n > file length\n";
       return false;
     }
 
-    *str = Slice(scratch, static_cast<size_t>(bytes));
+    *str = Slice(_mmapBase + offset, bytes);
     return true;
   }
 
-  size_t fileSize() const
-  {return _file_size;}
-
-  void close()
-  {
-    char* tmp = const_cast<char*>(_data);
-    ::munmap(reinterpret_cast<void*>(tmp), _file_size);
-    if (::close(_fd) < 0)
-      std::cerr << "MmapReadablePosixFile: RandomAccessPosixFile: close error\n";
-  }
-
  private:
-  std::string _file_name;
-  size_t _file_size;
-  int _fd;
-  const char* _data;
+  char* const _mmapBase;
+  const size_t _length;
+  std::shared_ptr<ResourceLimiter> _mmapLimiter;
+  const std::string _fileName;
 };
 
 }
 
-void newWritableFile(const std::string& file_name, WritableFile** result)
+class PosixEnv : public Env
 {
-  int fd = ::open(file_name.c_str(),
-                  O_APPEND | O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
-  if (fd < 0)
+ public:
+  PosixEnv() {}
+  ~PosixEnv() override
   {
-    *result = nullptr;
-    return; 
+    std::cerr << "PosixEnv: PosixEnv destructor\n";
+    std::abort();
   }
 
-  *result = new WritablePosixFile(fd, file_name);
-  return; 
-}
+  bool removeFile(const std::string& fname) override;
 
-void newRandomAccessFile(const std::string& file_name, RandomAccessFile** result)
-{
-  int fd = ::open(file_name.c_str(), O_RDONLY | OpenBaseFlags);
+  bool renameFile(const std::string& src, const std::string& target) override;
 
-  if (fd < 0)
+  void newWritableFile(std::string& file_name, WritableFile** result) override;
+
+  void newRandomAccessFile(std::string& file_name, RandomAccessFile** result) override;
+
+  static Env* Default()
   {
-    *result = nullptr;
-    return;
+    static SinglePosixEnv envContainer;
+    return envContainer.env();
   }
+};
 
-  *result = new RandomAccessPosixFile(fd, file_name);
-  return;
-}
+template <typename EnvType>
+class SingleEnv
+{
+ public:
+  SingleEnv()
+  {
+#ifndef NDEBUG
+    _initialized.store(true, std::memory_order_relaxed);
+#endif
+    new (_envStorage) EnvType();
+  }
+  ~SingleEnv() = default;
+
+  SingleEnv(const SingleEnv& other) = delete;
+  SingleEnv& operator=(const SingleEnv& other) = delete;
+
+  Env* env() {return reinterpret_cast<Env*>(_envStorage);}
+ private:
+  char _envStorage[sizeof(EnvType)];
+#ifndef NDEBUG
+  static std::atomic<bool> _initialized;
+#endif
+};
+
+#ifndef NDEBUG
+template <typename EnvType>
+std::atomic<bool> SingleEnv<EnvType>::_initialized(false);
+#endif
+
+using SinglePosixEnv = SingleEnv<PosixEnv>;
 
 static bool doRemoveFile(const std::string& fname)
 {
@@ -455,10 +460,10 @@ static bool doRemoveFile(const std::string& fname)
   return true;
 }
 
-bool writeStringToFile(const Slice& data, const std::string& fname)
+bool writeStringToFile(const Slice& data, std::string fname)
 {return doWriteStringToFile(data, fname, false);}
 
-bool writeStringToFileSync(const Slice& data, const std::string& fname)
+bool writeStringToFileSync(const Slice& data, std::string fname)
 {return doWriteStringToFile(data, fname, true);}
 
 bool readFileToString(const std::string& fname, std::string* data)
@@ -479,7 +484,7 @@ bool readFileToString(const std::string& fname, std::string* data)
   }
 }
 
-static bool doWriteStringToFile(const Slice& data, const std::string& fname,
+static bool doWriteStringToFile(const Slice& data, std::string& fname,
                                 bool shouldSync)
 {
   WritableFile* file = nullptr;

@@ -51,7 +51,7 @@ class RandomAccessFile
   //
   // Safe for concurrent use by multiple threads.
   virtual bool read(uint64_t offset, Slice* str,
-                    char* scratch, uint64_t bytes) = 0;
+                    char* scratch, uint64_t bytes) const = 0;
 };
 
 /* A writable file abstract */
