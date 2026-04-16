@@ -13,6 +13,34 @@
 namespace yundb
 {
 
+class WritableFile;
+class RandomAccessFile;
+
+class Env
+{
+ public:
+  Env();
+
+  virtual ~Env();
+
+  Env(const Env& other) = delete;
+
+  Env& operator=(const Env& other) = delete;
+
+  static Env* Default();
+
+  Env& operator=(const Env& other) = delete;
+
+  virtual bool removeFile(const std::string& fname) = 0;
+
+  virtual bool renameFile(const std::string& src, const std::string& target) = 0;
+
+  virtual void newWritableFile(std::string& file_name, WritableFile** result) = 0;
+
+  virtual void newRandomAccessFile(std::string& file_name, RandomAccessFile** result) = 0;
+
+};
+
 /* Sequentia read a file */
 class SequentialFile
 {
@@ -69,38 +97,21 @@ class WritableFile
   virtual void sync() = 0;
 };
 
-class Env
+// Identifies a locked file.
+class LockFile
 {
  public:
-  Env();
-
-  Env(const Env& other) = delete;
-  Env& operator=(const Env& other) = delete;
-
-  virtual ~Env();
-
-  virtual bool removeFile(const std::string& fname);
-
-  virtual bool renameFile(const std::string& src, const std::string& target);
-
-  virtual void newWritableFile(std::string& file_name, WritableFile** result);
-
-  virtual void newRandomAccessFile(std::string& file_name, RandomAccessFile** result);
-
-  static Env* Default();
+  LockFile() = default;
+  LockFile(const LockFile& other) = delete;
+  LockFile& operator=(const LockFile& other) = delete;
+  virtual ~LockFile() = default;
 };
 
-// Temp put here
 bool writeStringToFile(const Slice& data, const std::string& fname);
 
 bool writeStringToFileSync(const Slice& data, const std::string& fname);
 
 bool readFileToString(const std::string& fname, std::string* data);
-
-// The following functions in future will add in Env class, but now we just put them here for simplicity
-void newWritableFile(std::string& file_name, WritableFile** result);
-
-void newRandomAccessFile(std::string& file_name, RandomAccessFile** result);
 
 }
 

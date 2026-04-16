@@ -4,10 +4,12 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <string.h>
+#include <set>
 #include <memory>
 #include <atomic>
 
 #include "util/error_print.h"
+#include "util/sync.h"
 #include "yundb/en.h"
 #include "yundb/options.h"
 
@@ -21,17 +23,6 @@ constexpr int OpenBaseFlags = 0;
 #endif  // defined(HAVE_O_CLOEXEC)
 
 constexpr size_t PosixWritableBufferSize =  65536;
-
-Env* Env::Default()
-{
-  return nullptr;
-}
-
-bool Env::removeFile(const std::string& fname)
-{return doRemoveFile(fname);}
-
-bool Env::renameFile(const std::string& src, const std::string& target)
-{return doRenameFile(src, target);}
 
 namespace
 {
@@ -392,7 +383,54 @@ class MmapReadablePosixFile final : public RandomAccessFile
   const std::string _fileName;
 };
 
-}
+class PosixLockFile : public LockFile
+{
+ public:
+  PosixLockFile(std::string fileName)
+      : _fd(::open(_fileName.c_str(), O_RDWR | O_CREAT | OpenBaseFlags, 0644)),
+        _fileName(std::move(fileName))
+  {
+    if (_fd < 0)
+    {
+      std::cerr << "PosixLockFile: open file: " << _fileName << "fail\n";
+      return;
+    }
+  }
+  ~PosixLockFile() override
+  {
+    if (::close(_fd) < 0)
+      std::cerr << "PosixLockFile: close file: " << _fileName << "fail\n";
+  }
+
+  std::string fileName() const { return _fileName; }
+ private:
+  const std::string _fileName;
+  const int _fd;
+};
+
+// Tracks the files locked by PosixEnv::LockFile().
+class LockFileTable
+{
+ public:
+  LockFileTable() = default;
+  ~LockFileTable() = default;
+  bool insert(const std::string& fileName)
+  {
+    sync::LockGuard<sync::Mutex> guard(_mu);
+    bool success = _lockedFiles.insert(fileName).second;
+    return success;
+  }
+
+  bool remove(const std::string& fname)
+  {
+    sync::LockGuard<sync::Mutex> guard(_mu);
+    size_t erased = _lockedFiles.erase(fname);
+    return erased > 0;
+  }
+ private:
+  sync::Mutex _mu;
+  std::set<std::string> _lockedFiles;
+};
 
 class PosixEnv : public Env
 {
@@ -404,11 +442,14 @@ class PosixEnv : public Env
     std::abort();
   }
 
-  bool removeFile(const std::string& fname) override;
+  bool removeFile(const std::string& fname) override
+  {return doRemoveFile(fname);}
 
-  bool renameFile(const std::string& src, const std::string& target) override;
+  bool renameFile(const std::string& src, const std::string& target) override
+  {return doRenameFile(src, target);}
 
-  void newWritableFile(std::string& file_name, WritableFile** result) override;
+  void newWritableFile(std::string& file_name, WritableFile** result) override
+  {*result = new WritablePosixFile(file_name, -1, _fdNumberLimiter);}
 
   void newRandomAccessFile(std::string& file_name, RandomAccessFile** result) override;
 
@@ -417,7 +458,12 @@ class PosixEnv : public Env
     static SinglePosixEnv envContainer;
     return envContainer.env();
   }
+ private:
+  std::shared_ptr<ResourceLimiter> _fdNumberLimiter; // Thread-safe.
+  std::shared_ptr<ResourceLimiter> _mmapLimiter;     // Thread-safe.
+  LockFileTable _lockFileTable;                      // Thread-safe.
 };
+
 
 template <typename EnvType>
 class SingleEnv
@@ -458,6 +504,8 @@ static bool doRemoveFile(const std::string& fname)
     return false;
   }
   return true;
+}
+
 }
 
 bool writeStringToFile(const Slice& data, std::string fname)

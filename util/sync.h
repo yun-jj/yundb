@@ -53,6 +53,19 @@ class CondVar {
   Mutex* const mu_;
 };
 
+template <typename LockType>
+class LockGuard {
+ public:
+  explicit LockGuard(LockType& mu) : mu_(mu) {  mu_.Lock(); }
+  ~LockGuard() { mu_.Unlock(); }
+
+  LockGuard(const LockGuard&) = delete;
+  LockGuard& operator=(const LockGuard&) = delete;
+
+ private:
+  LockType& mu_;
+};
+
 }
 
 #endif // YUNDB_UTIL_SYNC_H
