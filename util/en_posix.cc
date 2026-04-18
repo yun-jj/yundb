@@ -2,10 +2,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <string.h>
 #include <set>
-#include <memory>
+#include <queue>
 #include <atomic>
 
 #include "util/error_print.h"
@@ -15,6 +16,15 @@
 
 namespace yundb
 {
+
+namespace
+{
+
+// 
+int MaxOpenFiles = -1;
+
+// Up to 1000 mmap regions for 64-bit binaries; none for 32-bit.
+constexpr const int DefaultMmapLimit = (sizeof(void*) >= 8) ? 1000 : 0;
 // Common flags defined for all posix open operations
 #if defined(HAVE_O_CLOEXEC)
 constexpr int OpenBaseFlags = O_CLOEXEC;
@@ -24,10 +34,7 @@ constexpr int OpenBaseFlags = 0;
 
 constexpr size_t PosixWritableBufferSize =  65536;
 
-namespace
-{
-
-// Limte the number of open file descriptors and the mmap file usage
+// Limit the number of open file descriptors and the mmap file usage
 // so that we do not run out of file descriptors or virtual memory
 class ResourceLimiter
 {
@@ -72,9 +79,10 @@ class SequentialPosixFile final : public SequentialFile
   SequentialPosixFile(std::string fileName, int fd, 
                       std::shared_ptr<ResourceLimiter> limiter)
       : _limiter(std::move(limiter)),
-        _permanentFd(limiter == nullptr ? true : limiter->acquire()), 
+        _permanentFd(fd > 0), 
         _filename(std::move(fileName)),
         _fd(_permanentFd ? fd : -1) {}
+
   ~SequentialPosixFile() override
   {
     if (_permanentFd)
@@ -100,7 +108,8 @@ class SequentialPosixFile final : public SequentialFile
       fd = ::open(_filename.c_str(), O_RDONLY | OpenBaseFlags);
       if (fd < 0)
       {
-        std::cerr << "SequentialPosixFile: open file: " << _filename << "fail\n";
+        std::cerr << "SequentialPosixFile: open file: "
+                  << _filename << " fail\n";
         return false;
       }
     }
@@ -112,15 +121,21 @@ class SequentialPosixFile final : public SequentialFile
       if (readSize < 0)
       {
         if (errno == EINTR) continue;
-        std::cerr << "SequentialPosixFile: read file: " << _filename << "fail\n";
+        std::cerr << "SequentialPosixFile: read file: "
+                  << _filename << " fail\n";
         return false;
       }
       _offset += static_cast<off_t>(readSize);
       *str = Slice(scratch, static_cast<size_t>(bytes));
       break;
     }
-    if (::close(fd) < 0)
-      std::cerr << "SequentialPosixFile: close file: " << _filename << "fail\n";
+
+    if (!_permanentFd)
+    {
+      if (::close(fd) < 0)
+        std::cerr << "SequentialPosixFile: close file: "
+                  << _filename << " fail\n";
+    }
     return true;
   }
  private:
@@ -142,7 +157,7 @@ class RandomAccessPosixFile final : public RandomAccessFile
   RandomAccessPosixFile(std::string fileName, int fd,
                         std::shared_ptr<ResourceLimiter> limiter)
     :   _limiter(std::move(limiter)),
-        _permanentFd(limiter == nullptr ? true : limiter->acquire()),
+        _permanentFd(fd > 0),
         _fileName(std::move(fileName)),
         _fd(_permanentFd ? fd : -1) {}
 
@@ -151,8 +166,12 @@ class RandomAccessPosixFile final : public RandomAccessFile
     if (_permanentFd)
     {
       if (_limiter != nullptr) _limiter->release();
-      if (::close(_fd) < 0)
-        std::cerr << "RandomAccessPosixFile: close file: " << _fileName << "fail\n";
+      if (_fd > 0)
+      {
+        if (::close(_fd) < 0)
+          std::cerr << "RandomAccessPosixFile: close file: " << _fileName << " fail\n";
+      }
+
     }
   }
 
@@ -165,10 +184,14 @@ class RandomAccessPosixFile final : public RandomAccessFile
       result = doRead(_fd, static_cast<off_t>(offset), str, scratch, bytes);
     } else {
       int fd = ::open(_fileName.c_str(), O_RDONLY | OpenBaseFlags);
-      assert(fd >= 0);
+      if (fd < 0)
+      {
+        std::cerr << "RandomAccessPosixFile: open file: " << _fileName << " fail\n";
+        return false;
+      }
       result = doRead(fd, static_cast<off_t>(offset), str, scratch, bytes);
       if (::close(fd) < 0)
-        std::cerr << "RandomAccessPosixFile: close file: " << _fileName << "fail\n";
+        std::cerr << "RandomAccessPosixFile: close file: " << _fileName << " fail\n";
     }
 
     return result;
@@ -207,7 +230,7 @@ class WritablePosixFile final : public WritableFile
   WritablePosixFile(std::string filename, int fd,
                     std::shared_ptr<ResourceLimiter> limiter)
       : _limiter(std::move(limiter)),
-        _permanentFd(limiter == nullptr ? true : limiter->acquire()),
+        _permanentFd(fd > 0),
         _closed(false),
         _fd(_permanentFd ? fd : -1), 
         _filename(std::move(filename)) {}
@@ -258,11 +281,11 @@ class WritablePosixFile final : public WritableFile
         }
         else
         {
-          std::cerr << "close file: " << _filename << "fail\n";
+          std::cerr << "close file: " << _filename << " fail\n";
           return;
         }
       }
-    _closed = true;
+      _closed = true;
     }
   }
 
@@ -284,7 +307,8 @@ class WritablePosixFile final : public WritableFile
   {
     if (_closed)
     {
-      std::cerr << "WritablePosixFile: append file: " << _filename << "fail, file already closed\n";
+      std::cerr << "WritablePosixFile: append file: "
+                << _filename << " fail, file already closed\n";
       return;
     }
 
@@ -293,9 +317,9 @@ class WritablePosixFile final : public WritableFile
     {
       fd = ::open(_filename.c_str(),
                   O_APPEND | O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
-      if (fd < 0)
-      {
-        std::cerr << "open file: " << _filename << "fail\n";
+      if (fd < 0)      {
+        std::cerr << "WritablePosixFile: open file: "
+                  << _filename << " fail\n";
         return;
       }
     }
@@ -314,12 +338,12 @@ class WritablePosixFile final : public WritableFile
 
       size -= write_result;
       data += write_result;
-      }
+    }
 
       if (!_permanentFd)
       {
         if (::close(fd) != 0)
-          std::cerr << "close file: " << _filename << "fail\n";
+          std::cerr << "close file: " << _filename << " fail\n";
       }
   }
 
@@ -383,26 +407,22 @@ class MmapReadablePosixFile final : public RandomAccessFile
   const std::string _fileName;
 };
 
-class PosixLockFile : public LockFile
+class PosixFileLock : public FileLock
 {
  public:
-  PosixLockFile(std::string fileName)
-      : _fd(::open(_fileName.c_str(), O_RDWR | O_CREAT | OpenBaseFlags, 0644)),
-        _fileName(std::move(fileName))
-  {
-    if (_fd < 0)
-    {
-      std::cerr << "PosixLockFile: open file: " << _fileName << "fail\n";
-      return;
-    }
-  }
-  ~PosixLockFile() override
+  PosixFileLock(std::string fileName, int fd)
+      : _fd(fd),
+        _fileName(std::move(fileName)) {}
+
+  ~PosixFileLock() override
   {
     if (::close(_fd) < 0)
-      std::cerr << "PosixLockFile: close file: " << _fileName << "fail\n";
+      std::cerr << "PosixFileLock: close file: " << _fileName << " fail\n";
   }
 
   std::string fileName() const { return _fileName; }
+
+  int getFd() const { return _fd; }
  private:
   const std::string _fileName;
   const int _fd;
@@ -421,10 +441,10 @@ class LockFileTable
     return success;
   }
 
-  bool remove(const std::string& fname)
+  bool remove(const std::string& fileName)
   {
     sync::LockGuard<sync::Mutex> guard(_mu);
-    size_t erased = _lockedFiles.erase(fname);
+    size_t erased = _lockedFiles.erase(fileName);
     return erased > 0;
   }
  private:
@@ -435,23 +455,239 @@ class LockFileTable
 class PosixEnv : public Env
 {
  public:
-  PosixEnv() {}
+  PosixEnv();
   ~PosixEnv() override
   {
     std::cerr << "PosixEnv: PosixEnv destructor\n";
     std::abort();
   }
 
-  bool removeFile(const std::string& fname) override
-  {return doRemoveFile(fname);}
+  void newWritableFile(std::string& fileName, WritableFile** result) override
+  {
+    int fd = ::open(fileName.c_str(),
+                    O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
+    if (fd < 0)
+    {
+      std::cerr << "PosixEnv: open file: " << fileName << " fail\n";
+      *result = nullptr;
+      return;
+    }
 
-  bool renameFile(const std::string& src, const std::string& target) override
-  {return doRenameFile(src, target);}
+    if (_fdNumberLimiter->acquire()) {
+      *result = new WritablePosixFile(fileName, fd, _fdNumberLimiter);
+    } else {
+      *result = new WritablePosixFile(fileName, -1, _fdNumberLimiter);
+      if (::close(fd) < 0)
+        std::cerr << "PosixEnv: close file: " << fileName << " fail\n";
+    }
+  }
 
-  void newWritableFile(std::string& file_name, WritableFile** result) override
-  {*result = new WritablePosixFile(file_name, -1, _fdNumberLimiter);}
+  void newAppendableFile(std::string& fileName, WritableFile** result) override
+  {
+    int fd = ::open(fileName.c_str(),
+                    O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
+    if (fd < 0)
+    {
+      std::cerr << "PosixEnv: open file: " << fileName << " fail\n";
+      *result = nullptr;
+      return;
+    }
 
-  void newRandomAccessFile(std::string& file_name, RandomAccessFile** result) override;
+    if (_fdNumberLimiter->acquire()) {
+      *result = new WritablePosixFile(fileName, fd, _fdNumberLimiter);
+    } else {
+      *result = new WritablePosixFile(fileName, -1, _fdNumberLimiter);
+      if (::close(fd) < 0)
+        std::cerr << "PosixEnv: close file: " << fileName << " fail\n";
+    }
+  }
+
+  void newSequentialFile(std::string& fileName, SequentialFile** result) override
+  {
+    int fd = ::open(fileName.c_str(), O_RDONLY | OpenBaseFlags);
+    if(fd < 0)
+    {
+      std::cerr << "PosixEnv: open file: " << fileName << " fail\n";
+      *result = nullptr;
+      return;
+    }
+
+    if (_fdNumberLimiter->acquire()) {
+      *result = new SequentialPosixFile(fileName, fd, _fdNumberLimiter);
+    } else {
+      *result = new SequentialPosixFile(fileName, -1, _fdNumberLimiter);
+      if (::close(fd) < 0)
+        std::cerr << "PosixEnv: close file: " << fileName << " fail\n";
+    }
+  }
+
+  void newRandomAccessFile(std::string& fileName, RandomAccessFile** result) override
+  {
+    int fd = ::open(fileName.c_str(), O_RDONLY | OpenBaseFlags);
+    if (fd < 0)
+    {
+      std::cerr << "PosixEnv: open file: " << fileName << " fail\n";
+      *result = nullptr;
+      return;
+    }
+
+    if (_mmapLimiter->acquire())
+    {
+      uint64_t fileSize;
+      if (getFileSize(fileName, &fileSize)) 
+      {
+        void* mmapBase = ::mmap(nullptr, fileSize, PROT_READ, MAP_SHARED, fd, 0);
+        *result = new MmapReadablePosixFile(fileName, static_cast<char*>(mmapBase), fileSize, _mmapLimiter);
+      }
+      else
+      {
+        std::cerr << "PosixEnv: get file size: " << fileName << " fail\n";
+        if (::close(fd) < 0)
+          std::cerr << "PosixEnv: close file: " << fileName << " fail\n";
+      }
+      return;
+    }
+
+    if(_fdNumberLimiter->acquire()) {
+      *result = new RandomAccessPosixFile(fileName, fd, _fdNumberLimiter);
+    } else {
+      *result = new RandomAccessPosixFile(fileName, -1, _fdNumberLimiter);
+      if (::close(fd) < 0)
+        std::cerr << "PosixEnv: close file: " << fileName << " fail\n";
+    }
+  }
+
+  bool fileExists(const std::string& fileName) override {
+    return ::access(fileName.c_str(), F_OK) == 0;
+  }
+
+  bool getFileSize(const std::string& fileName, uint64_t* file_size) override
+  {
+    struct stat sb;
+    if (::stat(fileName.c_str(), &sb) != 0)
+    {
+      std::cerr << "PosixEnv: stat file: " << fileName << " fail\n";
+      return false;
+    }
+    *file_size = sb.st_size;
+    return true;
+  }
+
+  bool getChildren(const std::string& dir, std::vector<std::string>* result) override
+  {
+    result->clear();
+    ::DIR* d = ::opendir(dir.c_str());
+    if (d == nullptr)
+    {
+      std::cerr << "PosixEnv: open dir: " << dir << " fail\n";
+      return false;
+    }
+
+    struct ::dirent* entry;
+    while ((entry = ::readdir(d)) != nullptr)
+      result->emplace_back(entry->d_name);
+
+    if (::closedir(d) != 0)
+      std::cerr << "PosixEnv: close dir: " << dir << " fail\n";
+
+    return true;
+  }
+
+  bool removeFile(const std::string& fileName) override
+  {
+    if (::unlink(fileName.c_str()) != 0)
+    {
+      std::cerr << "PosixEnv: remove file: " << fileName << " fail\n";
+      return false;
+    }
+    return true;
+  }
+
+  bool renameFile(const std::string& src, const std::string& target) override {
+    return doRenameFile(src, target);
+  }
+
+  bool createDir(const std::string& fileName) override
+  {
+    if (::mkdir(fileName.c_str(), 0755) != 0)
+    {
+      std::cerr << "PosixEnv: create dir: " << fileName << " fail\n";
+      return false;
+    }
+    return true;
+  }
+
+  bool removeDir(const std::string& dirName) override
+  {
+    if (::rmdir(dirName.c_str()) != 0)
+    {
+      std::cerr << "PosixEnv: remove dir: " << dirName << " fail\n";
+      return false;
+    }
+    return true;
+  }
+
+  bool lockFile(const std::string& fileName, FileLock** lock) override
+  {
+    *lock = nullptr;
+    if (!_lockFileTable.insert(fileName))
+    {
+      std::cerr << "PosixEnv: lock file: " << fileName << " fail, already locked\n";
+      return false;
+    }
+
+    int fd = ::open(fileName.c_str(), O_RDWR | O_CREAT | OpenBaseFlags, 0644);
+    if (fd < 0)
+    {
+      std::cerr << "PosixEnv: open file: " << fileName << " fail\n";
+      return false;
+    }
+    
+    *lock = new PosixFileLock(fileName, fd);
+    if (*lock == nullptr)
+    {
+      std::cerr << "PosixEnv: new PosixFileLock for file: " << fileName << " fail\n";
+      if (::close(fd) < 0)
+        std::cerr << "PosixEnv: close file: " << fileName << " fail\n";
+      return false;
+    }
+
+    if (LockOrUnlock(fd, true) == -1)
+    {
+      std::cerr << "PosixEnv: lock file: " << fileName << " fail\n";
+      delete *lock;
+      *lock = nullptr;
+      return false;
+    }
+
+    return true;
+  }
+
+  bool unlockFile(FileLock* lock) override
+  {
+    if (lock == nullptr)
+    {
+      std::cerr << "PosixEnv: unlock file fail, lock is nullptr\n";
+      return false;
+    }
+
+    PosixFileLock* posixLock = static_cast<PosixFileLock*>(lock);
+    std::string fileName = posixLock->fileName();
+    if (!_lockFileTable.remove(fileName))
+    {
+      std::cerr << "PosixEnv: unlock file: " << fileName << " fail, not locked\n";
+      return false;
+    }
+
+    if (LockOrUnlock(posixLock->getFd(), false) == -1)
+    {
+      std::cerr << "PosixEnv: unlock file: " << fileName << " fail\n";
+      return false;
+    }
+
+    delete posixLock;
+    return true;
+  }
 
   static Env* Default()
   {
@@ -459,11 +695,35 @@ class PosixEnv : public Env
     return envContainer.env();
   }
  private:
+  sync::Mutex _backGroundWorkMutex;
+  sync::CondVar _backGroundWorkCondVar; // Protected by _backgroundWorkMutex.
+  bool _startedBackgroundWork; // protected by _backgroundWorkMutex.
   std::shared_ptr<ResourceLimiter> _fdNumberLimiter; // Thread-safe.
   std::shared_ptr<ResourceLimiter> _mmapLimiter;     // Thread-safe.
   LockFileTable _lockFileTable;                      // Thread-safe.
 };
 
+
+int maxMmapUsage() { return DefaultMmapLimit; }
+
+
+PosixEnv::PosixEnv()
+    : _backGroundWorkCondVar(&_backGroundWorkMutex),
+      _startedBackgroundWork(false),
+      _fdNumberLimiter(std::make_shared<ResourceLimiter>(maxOpenFile())),
+      _mmapLimiter(std::make_shared<ResourceLimiter>(maxMmapUsage())) {}
+
+int LockOrUnlock(int fd, bool lock)
+{
+  errno = 0;
+  struct ::flock file_lock_info;
+  std::memset(&file_lock_info, 0, sizeof(file_lock_info));
+  file_lock_info.l_type = (lock ? F_WRLCK : F_UNLCK);
+  file_lock_info.l_whence = SEEK_SET;
+  file_lock_info.l_start = 0;
+  file_lock_info.l_len = 0;  // Lock/unlock entire file.
+  return ::fcntl(fd, F_SETLK, &file_lock_info);
+}
 
 template <typename EnvType>
 class SingleEnv
@@ -495,16 +755,6 @@ std::atomic<bool> SingleEnv<EnvType>::_initialized(false);
 #endif
 
 using SinglePosixEnv = SingleEnv<PosixEnv>;
-
-static bool doRemoveFile(const std::string& fname)
-{
-  if (::unlink(fname.c_str()) != 0)
-  {
-    std::cerr << "removeFile: remove fail\n"; 
-    return false;
-  }
-  return true;
-}
 
 }
 

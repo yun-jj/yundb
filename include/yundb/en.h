@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <cerrno>      
 #include <cstring> 
 #include <memory>
@@ -14,7 +15,9 @@ namespace yundb
 {
 
 class WritableFile;
+class SequentialFile;
 class RandomAccessFile;
+class FileLock;
 
 class Env
 {
@@ -31,14 +34,52 @@ class Env
 
   Env& operator=(const Env& other) = delete;
 
-  virtual bool removeFile(const std::string& fname) = 0;
+  virtual void newWritableFile(std::string& fileName, WritableFile** result) = 0;
+
+  virtual void newAppendableFile(std::string& fileName, WritableFile** result) = 0;
+
+  virtual void newSequentialFile(std::string& fileName, SequentialFile** result) = 0;
+
+  virtual void newRandomAccessFile(std::string& fileName, RandomAccessFile** result) = 0;
+
+  // Returns true iff the named file exists.
+  virtual bool fileExists(const std::string& fileName) = 0;
+
+  virtual bool getFileSize(const std::string& fileName, uint64_t* file_size) = 0;
+
+  // Store in *result the names of the children of the specified directory.
+  // The names are relative to "dir".
+  // Original contents of *results are dropped.
+  virtual bool getChildren(const std::string& dir, std::vector<std::string>* result) = 0;
+
+  virtual bool removeFile(const std::string& fileName) = 0;
 
   virtual bool renameFile(const std::string& src, const std::string& target) = 0;
 
-  virtual void newWritableFile(std::string& file_name, WritableFile** result) = 0;
+  virtual bool createDir(const std::string& fileName) = 0;
 
-  virtual void newRandomAccessFile(std::string& file_name, RandomAccessFile** result) = 0;
+  virtual bool removeDir(const std::string& dirName) = 0;
 
+  // Lock the specified file.  Used to prevent concurrent access to
+  // the same db by multiple processes.  On failure, stores nullptr in
+  // *lock and returns non-OK.
+  //
+  // On success, stores a pointer to the object that represents the
+  // acquired lock in *lock and returns OK.  The caller should call
+  // UnlockFile(*lock) to release the lock.  If the process exits,
+  // the lock will be automatically released.
+  //
+  // If somebody else already holds the lock, finishes immediately
+  // with a failure.  I.e., this call does not wait for existing locks
+  // to go away.
+  //
+  // May create the named file if it does not already exist.
+  virtual bool lockFile(const std::string& fileName, FileLock** lock) = 0;
+
+  // Release the lock acquired by a previous successful call to LockFile.
+  // REQUIRES: lock was returned by a successful LockFile() call
+  // REQUIRES: lock has not already been unlocked.
+  virtual bool unlockFile(FileLock* lock) = 0;
 };
 
 /* Sequentia read a file */
@@ -98,13 +139,13 @@ class WritableFile
 };
 
 // Identifies a locked file.
-class LockFile
+class FileLock
 {
  public:
-  LockFile() = default;
-  LockFile(const LockFile& other) = delete;
-  LockFile& operator=(const LockFile& other) = delete;
-  virtual ~LockFile() = default;
+  FileLock() = default;
+  FileLock(const FileLock& other) = delete;
+  FileLock& operator=(const FileLock& other) = delete;
+  virtual ~FileLock() = default;
 };
 
 bool writeStringToFile(const Slice& data, const std::string& fname);
