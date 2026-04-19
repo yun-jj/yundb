@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <dirent.h>
 #include <fcntl.h>
 #include <string.h>
@@ -20,11 +21,12 @@ namespace yundb
 namespace
 {
 
-// 
-int MaxOpenFiles = -1;
-
 // Up to 1000 mmap regions for 64-bit binaries; none for 32-bit.
 constexpr const int DefaultMmapLimit = (sizeof(void*) >= 8) ? 1000 : 0;
+
+int MaxOpenFiles = -1;
+
+int MaxMmapLimit = DefaultMmapLimit;
 // Common flags defined for all posix open operations
 #if defined(HAVE_O_CLOEXEC)
 constexpr int OpenBaseFlags = O_CLOEXEC;
@@ -603,8 +605,14 @@ class PosixEnv : public Env
     return true;
   }
 
-  bool renameFile(const std::string& src, const std::string& target) override {
-    return doRenameFile(src, target);
+  bool renameFile(const std::string& src, const std::string& target) override
+  {
+    if(::rename(src.c_str(), target.c_str()) != 0)
+    {
+      std::cerr << "PosixEnv: rename file: " << src << " to " << target << " fail\n";
+      return false;
+    }
+    return true;
   }
 
   bool createDir(const std::string& fileName) override
@@ -704,14 +712,29 @@ class PosixEnv : public Env
 };
 
 
-int maxMmapUsage() { return DefaultMmapLimit; }
+int getMaxMmapUsage() { return MaxMmapLimit; }
+
+int getMaxOpenFile()
+{
+  if (MaxOpenFiles > 0) return MaxOpenFiles;
+
+  struct ::rlimit rlim;
+  if (::getrlimit(RLIMIT_NOFILE, &rlim) != 0) {
+    MaxOpenFiles = 50;
+  } else if (rlim.rlim_cur == RLIM_INFINITY) {
+    MaxOpenFiles = std::numeric_limits<int>::max();
+  } else {
+    MaxOpenFiles = static_cast<int>(rlim.rlim_cur);
+  }
+  return MaxOpenFiles;
+}
 
 
 PosixEnv::PosixEnv()
     : _backGroundWorkCondVar(&_backGroundWorkMutex),
       _startedBackgroundWork(false),
-      _fdNumberLimiter(std::make_shared<ResourceLimiter>(maxOpenFile())),
-      _mmapLimiter(std::make_shared<ResourceLimiter>(maxMmapUsage())) {}
+      _fdNumberLimiter(std::make_shared<ResourceLimiter>(getMaxOpenFile())),
+      _mmapLimiter(std::make_shared<ResourceLimiter>(getMaxMmapUsage())) {}
 
 int LockOrUnlock(int fd, bool lock)
 {
@@ -756,57 +779,6 @@ std::atomic<bool> SingleEnv<EnvType>::_initialized(false);
 
 using SinglePosixEnv = SingleEnv<PosixEnv>;
 
-}
-
-bool writeStringToFile(const Slice& data, std::string fname)
-{return doWriteStringToFile(data, fname, false);}
-
-bool writeStringToFileSync(const Slice& data, std::string fname)
-{return doWriteStringToFile(data, fname, true);}
-
-bool readFileToString(const std::string& fname, std::string* data)
-{
-  data->clear();
-  SequentialFile* file = nullptr;
-  if (file == nullptr)
-  {
-    std::cerr << "readFileToString: open file fail\n";
-    return false;
-  }
-
-  char buf[8192] = {0};
-
-  while (true)
-  {
-
-  }
-}
-
-static bool doWriteStringToFile(const Slice& data, std::string& fname,
-                                bool shouldSync)
-{
-  WritableFile* file = nullptr;
-  newWritableFile(fname, &file);
-
-  if (file == nullptr) return false;
-
-  std::shared_ptr<WritableFile> filePtr(file);
-
-  filePtr->append(data);
-  if (shouldSync) filePtr->sync();
-
-  return true;
-}
-
-static bool doRenameFile(const std::string& src, const std::string& target)
-{
-  if (std::rename(target.c_str(), target.c_str()) != 0)
-  {
-    std::cerr << "renameFile: rename fail\n";
-    return false;
-  }
-
-  return true;
 }
 
 }

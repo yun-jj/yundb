@@ -63,10 +63,8 @@ class Slice
 
   void removePrefix(size_t len)
   {
-     CERR_PRINT_WITH_CONDITIONAL(
-      "Slice: removePrefix len more than size()",
-      len <= size()
-   );
+     if (len <= size())
+       printError("Slice: removePrefix len more than size()");
      _str += len;
      _size -= len;
   }

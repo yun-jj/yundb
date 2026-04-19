@@ -11,13 +11,13 @@ FilterBlockBuilder::~FilterBlockBuilder() {}
 
 void FilterBlockBuilder::addKey(const Slice& key)
 {
-  CERR_PRINT_WITH_CONDITIONAL("FilterBlockBuilder: None key", key.empty());
+  if (key.empty()) printError("FilterBlockBuilder: None key");
   _tmp_keys.push_back(key);
 }
 
 void FilterBlockBuilder::generateFilter()
 {
-  CERR_PRINT_WITH_CONDITIONAL("FilterBlockBuilder: None keys", _tmp_keys.empty());
+  if (_tmp_keys.empty()) printError("FilterBlockBuilder: None keys");
   _policy->createFilter(&_tmp_keys[0], _tmp_keys.size(), &_result);
   _filter_offsets.push_back(_result.size());
   _tmp_keys.clear();
@@ -25,8 +25,7 @@ void FilterBlockBuilder::generateFilter()
 
 const Slice FilterBlockBuilder::finish()
 {
-  CERR_PRINT_WITH_CONDITIONAL("FilterBlockBuilder: None filter block",
-                               _result.empty());
+  if (_result.empty()) printError("FilterBlockBuilder: None filter block");
 
   uint32_t filterDataSize = _result.size();
 

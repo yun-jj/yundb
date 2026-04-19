@@ -32,9 +32,9 @@ BloomPolicyFilter::BloomPolicyFilter(uint32_t bits_per_key)
 void BloomPolicyFilter::createFilter(const Slice* keys,
                                      int n, std::string* dst) const 
 {
-  CERR_PRINT_WITH_CONDITIONAL("BloomPolicyFilter: None keys", keys == nullptr);
-  CERR_PRINT_WITH_CONDITIONAL("BloomPolicyFilter: None dst", dst == nullptr);
-  CERR_PRINT_WITH_CONDITIONAL("BloomPolicyFilter: error n value", n <= 0);
+  if (keys == nullptr) printError("BloomPolicyFilter: None keys");
+  if (dst == nullptr) printError("BloomPolicyFilter: None dst");
+  if (n <= 0) printError("BloomPolicyFilter: error n value");
 
   uint32_t m = static_cast<uint32_t>(_bits_per_key * n);
   uint32_t k = static_cast<uint32_t>(_bits_per_key * 0.69); // ln(2) ≈ 0.69

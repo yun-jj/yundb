@@ -208,10 +208,7 @@ void VersionEdit::decode(const Slice& data)
     msg = "invalid tag";
   }
 
-  CERR_PRINT_WITH_CONDITIONAL(
-    msg,
-    msg != nullptr
-  );
+  if (msg != nullptr) printError(msg);
 }
 
 };

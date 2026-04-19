@@ -36,10 +36,8 @@ class DataBlockBuilder
   // Return current max head Key
   Slice getLastKey() const
   {
-    CERR_PRINT_WITH_CONDITIONAL(
-      "DataBlockBuilder: None LastKey",
-      _last_Key.empty()
-    );
+    if (_last_Key.empty())
+      printError("DataBlockBuilder: None LastKey");
     return _last_Key;
   }
   void changeOptions(const Options& options)

@@ -16,14 +16,8 @@ SstableBuilder::SstableBuilder(Options& options, WritableFile* file)
       _data_block_builder(options),
       _index_block_builder(options)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "SstableBuilder: policy is null",
-    options.filter_policy == nullptr
-  );
-  CERR_PRINT_WITH_CONDITIONAL(
-    "SstableBuilder: file is null",
-    _file == nullptr
-  );
+  if (options.filter_policy == nullptr) printError("SstableBuilder: policy is null");
+  if (_file == nullptr) printError("SstableBuilder: file is null");
   Options tmpOption = options;
   tmpOption.block_restart_interval = 1;
   _index_block_builder.changeOptions(tmpOption);

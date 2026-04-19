@@ -7,14 +7,8 @@ namespace yundb
 
 uint64_t packSeqAndType(SequenceNumber seq, ValueType type)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "PackseqAndType: seq more than Max",
-    seq > MaxSequenceNumber
-  );
-  CERR_PRINT_WITH_CONDITIONAL(
-    "packseqAndType: type more than Max",
-    type > TypeForSeek
-  );
+  if (seq > MaxSequenceNumber) printError("PackseqAndType: seq more than Max");
+  if (type > TypeForSeek) printError("packseqAndType: type more than Max");
   return (seq << 8) | type; 
 }
 
@@ -30,10 +24,7 @@ InternalComparator::InternalComparator(const Options& options)
 
 Slice decodeKey(const Slice& entry)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "DecodeKey: entry is null",
-    entry.data() == nullptr
-  );
+  if (entry.data() == nullptr) printError("DecodeKey: entry is null");
 
   const char* keyEntry = entry.data();
   uint64_t keyLen;
@@ -43,10 +34,7 @@ Slice decodeKey(const Slice& entry)
 
 Slice decodeValue(const Slice& entry)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "DecodeValue: entry is null",
-    entry.data() == nullptr
-  );
+  if (entry.data() == nullptr) printError("DecodeValue: entry is null");
 
   const char* valueEntry = entry.data() + entry.size();
   uint64_t valueLen;

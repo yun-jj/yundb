@@ -9,14 +9,10 @@ namespace yundb
 std::string BlockHandle::encode(uint64_t position, uint64_t size) const
 {
   // Sanity check that all fields have been set
-  CERR_PRINT_WITH_CONDITIONAL(
-    "BlockHandle::Encode: error position value",
-    position == ~static_cast<uint64_t>(0)
-  );
-  CERR_PRINT_WITH_CONDITIONAL(
-    "BlockHandle::Encode: error size value",
-    size == ~static_cast<uint64_t>(0)
-  );
+  if (position == ~static_cast<uint64_t>(0))
+    printError("BlockHandle::Encode: error position value");
+  if (size == ~static_cast<uint64_t>(0))
+    printError("BlockHandle::Encode: error size value");
   std::string result;
   PutVarint64(&result, _position);
   PutVarint64(&result, _size);
@@ -25,10 +21,8 @@ std::string BlockHandle::encode(uint64_t position, uint64_t size) const
 
 const char* BlockHandle::decodeFrom(const char* data)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "BlockHandle: None ptr",
-    data == nullptr
-  );
+  if (data == nullptr)
+    printError("BlockHandle: None ptr");
 
   data =  GetVarint64Ptr(data, data + 10, &_position);
   data = GetVarint64Ptr(data, data + 10, &_size);
@@ -39,26 +33,20 @@ const char* BlockHandle::decodeFrom(const char* data)
 
 Footer::Footer(const Slice& footerBlock)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Footer: footer size error",
-    footerBlock.size() != MaxFooterSize
-  );
+  if (footerBlock.size() != MaxFooterSize)
+    printError("Footer: footer size error");
 
   const char* data = footerBlock.data();
 
   uint32_t flag1, flag2;
   flag1 = DecodeFixed32(data + BlockHandle::kMaxEncodedLength * 2);
 
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Footer: flag number error",
-    static_cast<uint32_t>(TableMagicNumber & 0xffffffffu) != flag1
-  );
+  if (static_cast<uint32_t>(TableMagicNumber & 0xffffffffu) != flag1)
+    printError("Footer: flag number error");
 
   flag2 = DecodeFixed32(data + BlockHandle::kMaxEncodedLength * 2 + 4);
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Footer: flag number error",
-    static_cast<uint32_t>(TableMagicNumber >> 32) != flag2
-  );
+  if (static_cast<uint32_t>(TableMagicNumber >> 32) != flag2)
+    printError("Footer: flag number error");
 
   data = _metaIndexHandle.decodeFrom(data);
   _indexBlockHandle.decodeFrom(data);
@@ -67,17 +55,14 @@ Footer::Footer(const Slice& footerBlock)
 void Footer::encodeTo(std::string* dst, const std::string& metaIndexHandle,
                       const std::string& indexBlockHandle)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Footer: None handle",
-    metaIndexHandle.empty() || indexBlockHandle.empty()
-  );
+  if (metaIndexHandle.empty() || indexBlockHandle.empty())
+    printError("Footer: None handle");
 
-  CERR_PRINT_WITH_CONDITIONAL(
-    "handle to bigger to fill",
-    metaIndexHandle.size() + indexBlockHandle.size() > MaxFooterSize - 8
-  );
+  if (metaIndexHandle.size() + indexBlockHandle.size() > MaxFooterSize - 8)
+    printError("handle to bigger to fill");
 
-  CERR_PRINT_WITH_CONDITIONAL("Footer: None dst", dst == nullptr);
+  if (dst == nullptr)
+    printError("Footer: None dst");
 
   size_t initSize = dst->size();
   dst->append(metaIndexHandle);
@@ -87,10 +72,8 @@ void Footer::encodeTo(std::string* dst, const std::string& metaIndexHandle,
   PutFixed32(dst, static_cast<uint32_t>(TableMagicNumber & 0xffffffffu));
   PutFixed32(dst, static_cast<uint32_t>(TableMagicNumber >> 32));
 
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Footer: size error",
-    dst->size() - initSize != MaxFooterSize
-  );
+  if (dst->size() - initSize != MaxFooterSize)
+    printError("Footer: size error");
 }
 
 inline void Footer::getMetaIndexPosAndSize(uint64_t* pos, uint64_t* size)

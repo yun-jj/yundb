@@ -31,10 +31,8 @@ namespace yundb
 
   void DataBlockBuilder::put(const Slice& key, const Slice& value)
   {
-    CERR_PRINT_WITH_CONDITIONAL(
-      "DataBlockBuilder: empty key or value",
-      key.empty() || value.empty()
-    );
+    if (key.empty() || value.empty())
+      printError("DataBlockBuilder: empty key or value");
 
     size_t pos = 0;
     if (_count != 0)

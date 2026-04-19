@@ -78,7 +78,8 @@ bool Reader::readRecord(Slice* record, std::string* scratch)
           // it could emit an empty kFirstType record at the tail end
           // of a block followed by a kFullType or kFirstType record
           // at the beginning of the next block.
-          if (!scratch->empty()) CERR_PRINT("log::Reader: partial record without end(1)");
+          if (!scratch->empty())
+            printError("log::Reader: partial record without end(1)");
         }
         prospectiveRecordOffset = physicalRecordOffset;
         scratch->clear();
@@ -93,7 +94,8 @@ bool Reader::readRecord(Slice* record, std::string* scratch)
           // it could emit an empty kFirstType record at the tail end
           // of a block followed by a kFullType or kFirstType record
           // at the beginning of the next block.
-          if (!scratch->empty()) CERR_PRINT("log::Reader: partial record without end(2)");
+          if (!scratch->empty())
+            printError("log::Reader: partial record without end(2)");
         }
         prospectiveRecordOffset = physicalRecordOffset;
         scratch->assign(fragment.data(), fragment.size());
@@ -102,7 +104,7 @@ bool Reader::readRecord(Slice* record, std::string* scratch)
 
       case MiddleType:
         if (!inFragmentedRecord) {
-          CERR_PRINT("log::Reader: missing start of fragmented record(1)");
+          printError("log::Reader: missing start of fragmented record(1)");
         } else {
           scratch->append(fragment.data(), fragment.size());
         }
@@ -110,7 +112,7 @@ bool Reader::readRecord(Slice* record, std::string* scratch)
 
       case LastType:
         if (!inFragmentedRecord) {
-          CERR_PRINT("log::Reader: missing start of fragmented record(2)");
+          printError("log::Reader: missing start of fragmented record(2)");
         } else {
           scratch->append(fragment.data(), fragment.size());
           *record = Slice(*scratch);
@@ -132,7 +134,7 @@ bool Reader::readRecord(Slice* record, std::string* scratch)
       case BadRecord:
         if (inFragmentedRecord)
         {
-          CERR_PRINT("log::Reader: error in middle of record");
+          printError("log::Reader: error in middle of record");
           inFragmentedRecord = false;
           scratch->clear();
         }
@@ -140,7 +142,7 @@ bool Reader::readRecord(Slice* record, std::string* scratch)
 
       default: {
         char buf[40];
-        CERR_PRINT("log::Reader: unknown record type");
+        printError("log::Reader: unknown record type");
         inFragmentedRecord = false;
         scratch->clear();
         break;
@@ -179,7 +181,7 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
         if (!success) {
           _readBuf.clear();
           _eof = true;
-          CERR_PRINT("log::Reader: read file error");
+          printError("log::Reader: read file error");
           return Eof;
         } else if (_readBuf.size() < recordBlockSize) {
           _eof = true;
@@ -207,7 +209,7 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
       _readBuf.clear();
       if (!_eof)
       {
-        CERR_PRINT("log::Reader: bad record length");
+        printError("log::Reader: bad record length");
         return BadRecord;
       }
       return Eof;
@@ -227,7 +229,7 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
       if (actualCrc != expectedCrc)
       {
         _readBuf.clear();
-        CERR_PRINT("log::Reader: checksum mismatch");
+        printError("log::Reader: checksum mismatch");
         return BadRecord;
       }
     }

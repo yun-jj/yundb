@@ -27,19 +27,15 @@ class BlockHandle
   // The position of the block in the file.
   uint64_t getPosition() const
   {
-    CERR_PRINT_WITH_CONDITIONAL(
-      "BlockHadle: no decode get 0 position",
-      !_is_decode
-    );
+    if (!_is_decode)
+      printError("BlockHadle: no decode get 0 position");
     return _position;
   }
   // The size of the stored block
   uint64_t getSize() const
   {
-    CERR_PRINT_WITH_CONDITIONAL(
-      "BlockHadle: no decode get 0 position",
-      !_is_decode
-    );
+    if (!_is_decode)
+      printError("BlockHadle: no decode get 0 position");
     return _size;
   }
   // Encode position and size to dst

@@ -61,7 +61,7 @@ bool MemTable::get(LookUpKey& key, std::string* value, bool& found)
 {
   if (!found) 
   {
-    CERR_PRINT("found not true");
+    printError("found not true");
     return false;
   }
   /* Find key */

@@ -65,10 +65,8 @@ class VersionEdit
 
   void setComparatorName(std::string name)
   {
-    CERR_PRINT_WITH_CONDITIONAL(
-      "VersionEdit: comparator name is empty",
-      name.empty()
-    )
+    if (name.empty())
+      printError("VersionEdit: comparator name is empty");
     _comparatorName = name;
   }
 

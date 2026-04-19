@@ -17,10 +17,8 @@ std::string generateFileName(uint64_t number, const std::string& dbName,
 bool parseFileName(const std::string fileName, uint64_t* number,
                    FileType* fileType)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "ParseFileName: nullptr", 
-    number == nullptr || fileType == nullptr
-  );
+  if (number == nullptr || fileType == nullptr)
+    printError("ParseFileName: nullptr");
 
   size_t pos = fileName.find_last_of("/");
   Slice name(fileName.data(), fileName.size() - pos);  
@@ -50,28 +48,19 @@ bool parseFileName(const std::string fileName, uint64_t* number,
 
 std::string generateLogFileName(uint64_t number, const std::string& dbName)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "generateLogFileName: error number",
-    number <= 0
-  ); 
+  if (number <= 0) printError("generateLogFileName: error number"); 
   return generateFileName(number, dbName, "log");
 }
 
 std::string generateTableFileName(uint64_t number, const std::string& dbName)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "generateTableFileName: error number",
-    number <= 0
-  );
+  if (number <= 0) printError("generateTableFileName: error number");
   return generateFileName(number, dbName, "sst");
 }
 
 std::string generateDescriptorFileName(uint64_t number, const std::string& dbName)
 { 
-  CERR_PRINT_WITH_CONDITIONAL(
-    "generateTableFileName: error number",
-    number <= 0
-  );
+  if (number <= 0) printError("generateTableFileName: error number");
   char buf[20];
   std::snprintf(buf, sizeof(buf), "/MANIFEST-%06llu",
                 static_cast<unsigned long long>(number));
@@ -83,10 +72,7 @@ std::string generateCurrentFileName(uint64_t number, const std::string& dbName)
 
 std::string generateTempFileName(uint64_t number, const std::string& dbName)
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "generateTableFileName: error number",
-    number <= 0
-  );
+  if (number <= 0) printError("generateTableFileName: error number");
   return generateFileName(number, dbName, "dbtmp");
 }
 

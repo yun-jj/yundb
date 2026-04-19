@@ -13,7 +13,7 @@ SstableReader::SstableReader(const Options& options, std::string fileName)
 {
   FileType type;
   if (!parseFileName(fileName, &_fileNumber, &type) || type != FileType::TableFile)
-    CERR_PRINT("SstableReader: file name error");
+    printError("SstableReader: file name error");
   
   RandomAccessFile* randomFile; 
   newRandomAccessFile(fileName, &randomFile);

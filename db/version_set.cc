@@ -104,15 +104,11 @@ void Version::ref()
 
 bool Version::unRef()
 {
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Version: ref <= 0",
-    _ref <= 0
-  );
+  if (_ref <= 0)
+    printError("Version: ref <= 0");
 
-  CERR_PRINT_WITH_CONDITIONAL(
-    "Version: unRef a dummyVersion",
-    this == &_versionSet->_dummyVersion
-  );
+  if (this == &_versionSet->_dummyVersion)
+    printError("Version: unRef a dummyVersion");
   _ref--;
 
   if (_ref == 0)
@@ -348,10 +344,8 @@ void VersionSet::Builder::saveTo(Version* v)
       {
         const auto& prevEnd = v->_files[level][i - 1]->largest;
         const auto& thisBegin= v->_files[level][i]->smallest;
-        CERR_PRINT_WITH_CONDITIONAL(
-          "VersionSet: overlapping ranges in level " << level,
-          _set->_comparator->cmp(prevEnd, thisBegin) >= 0
-        );
+        if (_set->_comparator->cmp(prevEnd, thisBegin) >= 0)
+          printError("VersionSet: overlapping ranges in level ", level);
       }
     }
   }
@@ -456,11 +450,10 @@ bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
 {
   if (edit._hasLogNumber)
   {
-    CERR_PRINT_WITH_CONDITIONAL(
-      "VersionSet: log number error",
-      edit._logNumber < _logNumber || 
-      edit._logNumber >= _nextFileNumber
-    );
+    if (edit._logNumber < _logNumber || 
+        edit._logNumber >= _nextFileNumber) {
+        printError("VersionSet: log number error");
+      }
   }
   else edit.setLogNumber(_logNumber);
 

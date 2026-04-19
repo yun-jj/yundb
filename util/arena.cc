@@ -24,7 +24,7 @@ size_t Arena::getMemoryUsage()
 char* Arena::allocateNewBlock(size_t bytes)
 {
   char* result = new char[bytes];
-  CERR_PRINT_WITH_CONDITIONAL("Arena allocate fail", result == nullptr);
+  if (result == nullptr) printError("Arena allocate fail");
   _block.push_back(result);
   _memory_usage.fetch_add(sizeof(char*) + bytes, std::memory_order_relaxed);
   return result;
@@ -32,7 +32,7 @@ char* Arena::allocateNewBlock(size_t bytes)
 
 char* Arena::allocate(size_t bytes)
 {
-  CERR_PRINT_WITH_CONDITIONAL("allocate bytes param error", bytes <= 0);
+  if (bytes <= 0) printError("allocate bytes param error");
   if (bytes > (KBlockSize / 4))
   {
     char* block = allocateNewBlock(bytes);

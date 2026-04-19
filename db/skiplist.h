@@ -73,22 +73,22 @@ class SkipList<KeyType, InternalComparator>::Node
   Node(const KeyType& key) : _key(key){}
   Node* getNext(int level) const
   {
-    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    if (level < 0) printError("level is negative");
     return _next[level].load(std::memory_order_acquire);
   }
   Node* noBarrierGetNext(int level) const
   {
-    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    if (level < 0) printError("level is negative");
     return _next[level].load(std::memory_order_relaxed);
   }
   void setNext(int level, Node* next)
   {
-    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    if (level < 0) printError("level is negative");
     _next[level].store(next, std::memory_order_release);
   }
   void noBarrierSetNext(int level, Node* next)
   {
-    CERR_PRINT_WITH_CONDITIONAL("level is negative", level < 0);
+    if (level < 0) printError("level is negative");
     _next[level].store(next, std::memory_order_relaxed);
   }
   KeyType getKey() const
@@ -123,8 +123,8 @@ int SkipList<KeyType, InternalComparator>::randomHeight()
   /* 1/Brancing chance insert */
   while (_rand.OneIn(Brancing) && height < MaxHeight)
     height++;
-  CERR_PRINT_WITH_CONDITIONAL("height over than MaxHeight",
-                               height > MaxHeight);
+  if (height > MaxHeight)
+    printError("height over than MaxHeight");
   return height;
 }
 
