@@ -8,6 +8,7 @@
 #include <string.h>
 #include <set>
 #include <queue>
+#include <thread>
 #include <atomic>
 
 #include "util/error_print.h"
@@ -458,6 +459,11 @@ class PosixEnv : public Env
 {
  public:
   PosixEnv();
+  PosixEnv()
+      : _backGroundWorkCondVar(&_backGroundWorkMutex),
+        _startedBackgroundWork(false),
+        _fdNumberLimiter(std::make_shared<ResourceLimiter>(getMaxOpenFile())),
+        _mmapLimiter(std::make_shared<ResourceLimiter>(getMaxMmapUsage())) {}
   ~PosixEnv() override
   {
     std::cerr << "PosixEnv: PosixEnv destructor\n";
@@ -697,15 +703,60 @@ class PosixEnv : public Env
     return true;
   }
 
+  void schedule(void (*function)(void* arg), void* arg) override
+  {
+    _backGroundWorkMutex.Lock();
+    if (!_startedBackgroundWork)
+    {
+      _startedBackgroundWork = true;
+      std::thread backThread(&PosixEnv::threadEntry, this);
+    }
+    _backgroundWorkQueue.emplace(function, arg);
+    _backGroundWorkCondVar.signal();
+    _backGroundWorkMutex.unlock();
+  }
+
+  void startThread(void (*function)(void* arg), void* arg) override
+  {
+    std::thread thread(function, arg);
+    thread.detach();
+  }
+
   static Env* Default()
   {
     static SinglePosixEnv envContainer;
     return envContainer.env();
   }
  private:
+  class BackgroundWork
+  {
+   public:
+    BackgroundWork(void (*function)(void* arg), void* arg)
+        : function(function), arg(arg) {}
+    void (*function)(void* arg);
+    void* arg;
+  };
+
+  void threadEntry()
+  {
+    while (true)
+    {
+      _backGroundWorkMutex.Lock();
+
+      while (_backgroundWorkQueue.empty())
+      _backGroundWorkCondVar.wait();
+
+      BackgroundWork work = _backgroundWorkQueue.front();
+      _backgroundWorkQueue.pop();
+      _backGroundWorkMutex.unlock();
+      work.function(work.arg);
+    }
+  }
+
   sync::Mutex _backGroundWorkMutex;
   sync::CondVar _backGroundWorkCondVar; // Protected by _backgroundWorkMutex.
   bool _startedBackgroundWork; // protected by _backgroundWorkMutex.
+  std::queue<BackgroundWork> _backgroundWorkQueue; // Protected by _backgroundWorkMutex.
   std::shared_ptr<ResourceLimiter> _fdNumberLimiter; // Thread-safe.
   std::shared_ptr<ResourceLimiter> _mmapLimiter;     // Thread-safe.
   LockFileTable _lockFileTable;                      // Thread-safe.
@@ -728,13 +779,6 @@ int getMaxOpenFile()
   }
   return MaxOpenFiles;
 }
-
-
-PosixEnv::PosixEnv()
-    : _backGroundWorkCondVar(&_backGroundWorkMutex),
-      _startedBackgroundWork(false),
-      _fdNumberLimiter(std::make_shared<ResourceLimiter>(getMaxOpenFile())),
-      _mmapLimiter(std::make_shared<ResourceLimiter>(getMaxMmapUsage())) {}
 
 int LockOrUnlock(int fd, bool lock)
 {

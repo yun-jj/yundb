@@ -481,7 +481,7 @@ bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
     // first call to LogAndApply (when opening the database).
     assert(_descriptorFile == nullptr);
     newManifestFile = generateDescriptorFileName(_manifestFileNumber, _dbName);
-    newWritableFile(newManifestFile, &_descriptorFile);
+    _options.env->newWritableFile(newManifestFile, &_descriptorFile);
     // Writer need crc code
     _descriptorLog = new log::Writer(_descriptorFile);
     saveSnapshot(_descriptorLog);

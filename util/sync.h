@@ -24,7 +24,7 @@ class Mutex {
   Mutex& operator=(const Mutex&) = delete;
 
   void Lock() {mu_.lock();}
-  void Unlock() { mu_.unlock(); }
+  void unlock() { mu_.unlock(); }
 
  private:
   friend class CondVar;
@@ -40,13 +40,13 @@ class CondVar {
   CondVar(const CondVar&) = delete;
   CondVar& operator=(const CondVar&) = delete;
 
-  void Wait() {
+  void wait() {
     std::unique_lock<std::mutex> lock(mu_->mu_, std::adopt_lock);
     cv_.wait(lock);
     lock.release();
   }
-  void Signal() { cv_.notify_one(); }
-  void SignalAll() { cv_.notify_all(); }
+  void signal() { cv_.notify_one(); }
+  void signalAll() { cv_.notify_all(); }
 
  private:
   std::condition_variable cv_;
