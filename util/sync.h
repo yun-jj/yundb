@@ -57,7 +57,7 @@ template <typename LockType>
 class LockGuard {
  public:
   explicit LockGuard(LockType& mu) : mu_(mu) {  mu_.Lock(); }
-  ~LockGuard() { mu_.Unlock(); }
+  ~LockGuard() { mu_.unlock(); }
 
   LockGuard(const LockGuard&) = delete;
   LockGuard& operator=(const LockGuard&) = delete;

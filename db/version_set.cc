@@ -489,7 +489,7 @@ bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
 
   // Unlock during expensive MANIFEST log write
   {
-    mu->Unlock();
+    mu->unlock();
 
     // Write new record to MANIFEST log
     std::string record;

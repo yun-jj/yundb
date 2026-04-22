@@ -10,6 +10,51 @@
 namespace yundb
 {
 
+struct LRUHandle
+{
+  const Slice getKey() const
+  {return Slice(keyData, keyLen);}
+
+  const size_t getHashValue() const
+  {return hashValue;}
+
+  void (*deleter)(const Slice& key, void* value);
+  void* value;
+  LRUHandle* nextHash;
+  LRUHandle* pre;
+  LRUHandle* next;
+
+  // _inUse = true when _incache = true and refs > 1
+  bool inUse;
+  bool inCache;
+  int refs;
+  size_t hashValue;
+  size_t keyLen;
+  size_t charge;
+  char keyData[1];
+};
+
+class LRUTable
+{
+ public:
+  LRUTable();
+
+  ~LRUTable();
+
+  LRUHandle** lookup(const Slice& key, const size_t hash);
+
+  LRUHandle* remove(size_t hashValue, const Slice& key);
+
+  void insert(LRUHandle* handle);
+
+  void resize();
+
+ private:
+  LRUHandle** findPointer(const Slice& key, size_t hash);
+  int elems;
+  std::vector<LRUHandle*> _buckets;
+};
+
 class Cache
 {
  public:
@@ -21,6 +66,8 @@ class Cache
   // return the value. If not found, it will return nullptr.
   void* lookup(const Slice& key);
 
+  // Insert key-value pair into cache, charge is the memory usage of this key-value pair
+  // deleter is the function to delete this key-value pair when evicted from cache
   void insert(const Slice& key, void* value, size_t charge,
               void (*deleter)(const Slice& key, void* value));
 

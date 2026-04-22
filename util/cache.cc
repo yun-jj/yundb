@@ -17,52 +17,6 @@ static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value, size_
 
 static void freeLRUHandle(LRUHandle* handle);
 
-
-struct LRUHandle
-{
-  const Slice getKey() const
-  {return Slice(keyData, keyLen);}
-
-  const size_t getHashValue() const
-  {return hashValue;}
-
-  void (*deleter)(const Slice& key, void* value);
-  void* value;
-  LRUHandle* nextHash;
-  LRUHandle* pre;
-  LRUHandle* next;
-
-  // _inUse = true when _incache = true and refs > 1
-  bool inUse;
-  bool inCache;
-  int refs;
-  size_t hashValue;
-  size_t keyLen;
-  size_t charge;
-  char keyData[1];
-};
-
-class LRUTable
-{
- public:
-  LRUTable();
-
-  ~LRUTable();
-
-  LRUHandle** lookup(const Slice& key, const size_t hash);
-
-  LRUHandle* remove(size_t hashValue, const Slice& key);
-
-  void insert(LRUHandle* handle);
-
-  void resize();
-
- private:
-  LRUHandle** findPointer(const Slice& key, size_t hash);
-  int elems;
-  std::vector<LRUHandle*> _buckets;
-};
-
 Cache::Cache(const Options& options)
     : _options(options),
       _usage(0),
@@ -84,7 +38,7 @@ Cache::~Cache()
     freeLRUHandle(handle);
     handle = next;
   }
-  _mutex.Unlock();
+  _mutex.unlock();
 }
 
 void* Cache::lookup(const Slice& key)
@@ -95,7 +49,7 @@ void* Cache::lookup(const Slice& key)
   if (handle == nullptr) return nullptr;
 
   ref(handle);
-  _mutex.Unlock();
+  _mutex.unlock();
   return (*handle)->value;
 }
 
@@ -107,7 +61,7 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
                                    value, charge, deleter);
   _mutex.Lock();
   _hashTable.insert(handle);
-  _mutex.Unlock();
+  _mutex.unlock();
   handle->inCache = true;
   handle->refs = 1;
   _usage += charge;
@@ -122,7 +76,7 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
     _usage -= old->charge;
     freeLRUHandle(old);
   }
-  _mutex.Unlock();
+  _mutex.unlock();
 }
 
 void Cache::unRef(const Slice& key)
@@ -130,7 +84,7 @@ void Cache::unRef(const Slice& key)
   _mutex.Lock();
   LRUHandle** handle = _hashTable.lookup(key, hash(key.data(), key.size(), HASHSEED));
   if (handle != nullptr) unRef(handle);
-  _mutex.Unlock();
+  _mutex.unlock();
 }
 
 void Cache::prune()
@@ -145,14 +99,14 @@ void Cache::prune()
     freeLRUHandle(handle);
     handle = next;
   }
-  _mutex.Unlock();
+  _mutex.unlock();
 }
 
 size_t Cache::getUsage() const
 {
   _mutex.Lock();
   size_t usage = _usage;
-  _mutex.Unlock();
+  _mutex.unlock();
   return usage;
 }
 
