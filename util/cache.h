@@ -58,7 +58,7 @@ class LRUTable
 class Cache
 {
  public:
-  Cache(const Options& options);
+  Cache(const size_t capacity);
 
   ~Cache();
 
@@ -77,9 +77,9 @@ class Cache
   // Remove all cache entries that in lru list
   void prune(); 
 
-  size_t getUsage() const;
+  void changeCpacity(size_t capacity);
 
-  void changeOptions(const Options& options);
+  size_t getUsage() const;
 
  private:
   void LRUInsert(LRUHandle** handle);
@@ -93,8 +93,6 @@ class Cache
   void ref(LRUHandle** handle);
 
   void unRef(LRUHandle** handle);
-
-  Options _options;
 
   mutable sync::Mutex _mutex;;
 

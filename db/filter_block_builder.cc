@@ -12,15 +12,15 @@ FilterBlockBuilder::~FilterBlockBuilder() {}
 void FilterBlockBuilder::addKey(const Slice& key)
 {
   if (key.empty()) printError("FilterBlockBuilder: None key");
-  _tmp_keys.push_back(key);
+  _tmpKeys.push_back(key);
 }
 
 void FilterBlockBuilder::generateFilter()
 {
-  if (_tmp_keys.empty()) printError("FilterBlockBuilder: None keys");
-  _policy->createFilter(&_tmp_keys[0], _tmp_keys.size(), &_result);
-  _filter_offsets.push_back(_result.size());
-  _tmp_keys.clear();
+  if (_tmpKeys.empty()) printError("FilterBlockBuilder: None keys");
+  _policy->createFilter(&_tmpKeys[0], _tmpKeys.size(), &_result);
+  _filterOffsets.push_back(_result.size());
+  _tmpKeys.clear();
 }
 
 const Slice FilterBlockBuilder::finish()
@@ -30,14 +30,14 @@ const Slice FilterBlockBuilder::finish()
   uint32_t filterDataSize = _result.size();
 
   // Put filter data offset
-  for (int i = 0; _filter_offsets.size() > i; i++) 
-    PutFixed32(&_result, _filter_offsets[i]);  
+  for (int i = 0; _filterOffsets.size() > i; i++) 
+    PutFixed32(&_result, _filterOffsets[i]);  
 
   // Put filter data size
   PutFixed32(&_result, filterDataSize);
 
   // Put filter data number
-  PutFixed32(&_result, _filter_offsets.size());
+  PutFixed32(&_result, _filterOffsets.size());
 
   return Slice(_result.data(), _result.size());
 }

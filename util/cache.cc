@@ -17,10 +17,9 @@ static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value, size_
 
 static void freeLRUHandle(LRUHandle* handle);
 
-Cache::Cache(const Options& options)
-    : _options(options),
-      _usage(0),
-      _capacity(options.max_cache_size)
+Cache::Cache(size_t capacity)
+    : _usage(0),
+      _capacity(capacity)
 {
   _lru.pre = &_lru;
   _lru.next = &_lru;
@@ -102,18 +101,15 @@ void Cache::prune()
   _mutex.unlock();
 }
 
+void Cache::changeCpacity(size_t capacity)
+{ _capacity = capacity; }
+
 size_t Cache::getUsage() const
 {
   _mutex.Lock();
   size_t usage = _usage;
   _mutex.unlock();
   return usage;
-}
-
-void Cache::changeOptions(const Options& options)
-{
-  _options = options;
-  _capacity = options.max_cache_size;
 }
 
 void Cache::LRUInsert(LRUHandle** handle)

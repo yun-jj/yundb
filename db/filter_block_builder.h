@@ -35,8 +35,8 @@ class FilterBlockBuilder
   // Computed filter data
   std::string _result;
   // For filter->createFilter() argument
-  std::vector<Slice> _tmp_keys;
-  std::vector<uint32_t> _filter_offsets;
+  std::vector<Slice> _tmpKeys;
+  std::vector<uint32_t> _filterOffsets;
 };
 
 }
