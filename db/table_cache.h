@@ -7,10 +7,18 @@
 namespace yundb
 {
 
-// Tabl
 class TableCache
 {
- 
+ public:
+  TableCache(const std::string& dbname, const Options& options, int entries);
+
+  ~TableCache();
+
+ private:
+  Cache* cache_;
+  Options options_;
+  std::string dbname_;
+  int entries_;
 };
 
 }
