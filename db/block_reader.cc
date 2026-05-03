@@ -5,7 +5,11 @@
 #include <utility>
 
 namespace yundb
-{  
+{
+
+DataBlockReader::DataBlockReader(const Options& options)
+    : _options(options) {}
+
 DataBlockReader::Iter::Iter(const char* blockStart, const char* restartPtr,
                             const char* restartPtrHead, const char* restartPtrTail)
       : _block_start(blockStart),

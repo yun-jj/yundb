@@ -109,7 +109,8 @@ void SstableBuilder::build(const MemTable* memtable)
   size_t oldBlockPos = _cur_block_position;
   Slice filterBlock = _filter_block_builder.finish();
   writeRawBlock(filterBlock, NoCompression);
-  std::string filterHandle = _handle_builder.encode(oldBlockPos, filterBlock.size());
+  std::string filterHandle(_options.filter_policy->Name());
+  filterHandle += _handle_builder.encode(oldBlockPos, filterBlock.size());
 
   // Write meta index block
   oldBlockPos = _cur_block_position;

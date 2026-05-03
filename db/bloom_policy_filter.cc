@@ -11,7 +11,7 @@ static uint32_t bloomHash(const Slice& key)
 class BloomPolicyFilter : public FilterPolicy
 {
  public:
-  explicit BloomPolicyFilter(uint32_t bits_per_key);
+  explicit BloomPolicyFilter(uint32_t bitsPerKey);
   virtual ~BloomPolicyFilter(){};
 
   virtual const char* Name() const override
@@ -23,11 +23,11 @@ class BloomPolicyFilter : public FilterPolicy
   // in the list of keys passed to createFilter().
   virtual bool keyMayMatch(const Slice& key, const Slice& filter) const override;
  private:
-  uint32_t _bits_per_key;
+  uint32_t _bitsPerKey;
 };
 
-BloomPolicyFilter::BloomPolicyFilter(uint32_t bits_per_key)
-      : _bits_per_key(bits_per_key) {}  
+BloomPolicyFilter::BloomPolicyFilter(uint32_t bitsPerKey)
+      : _bitsPerKey(bitsPerKey) {}  
 
 void BloomPolicyFilter::createFilter(const Slice* keys,
                                      int n, std::string* dst) const 
@@ -36,8 +36,8 @@ void BloomPolicyFilter::createFilter(const Slice* keys,
   if (dst == nullptr) printError("BloomPolicyFilter: None dst");
   if (n <= 0) printError("BloomPolicyFilter: error n value");
 
-  uint32_t m = static_cast<uint32_t>(_bits_per_key * n);
-  uint32_t k = static_cast<uint32_t>(_bits_per_key * 0.69); // ln(2) ≈ 0.69
+  uint32_t m = static_cast<uint32_t>(_bitsPerKey * n);
+  uint32_t k = static_cast<uint32_t>(_bitsPerKey * 0.69); // ln(2) ≈ 0.69
 
   if (k < 1) k = 1;
   if (k > 30) k = 30;

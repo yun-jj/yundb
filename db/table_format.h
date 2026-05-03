@@ -15,6 +15,9 @@ namespace yundb
 // and taking the leading 64 bits.
 constexpr uint64_t TableMagicNumber = 0xbf920e1798aff023ull;
 
+// First is pos, second is size
+using PosAndSize = std::pair<uint64_t, uint64_t>;
+
 // BlockHandle is a pointer to the extent of a file that stores a data
 // block or a meta block.
 class BlockHandle
@@ -56,13 +59,13 @@ class Footer
   enum {MaxFooterSize = BlockHandle::kMaxEncodedLength * 2 + 8};
 
   Footer(const Slice& footerBlock);
-  Footer(){}
+  Footer() = default;
   ~Footer(){}
 
   void encodeTo(std::string* input, const std::string& metaIndexHandle,
                 const std::string& indexBlockHandle);
-  inline void getMetaIndexPosAndSize(uint64_t* pos, uint64_t* size);
-  inline void getIndexBlockPosAndSize(uint64_t* pos, uint64_t* size);
+  inline PosAndSize getMetaIndexPosAndSize() const;
+  inline PosAndSize getIndexBlockPosAndSize() const;
 
  private:
   BlockHandle _metaIndexHandle;

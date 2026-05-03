@@ -55,14 +55,17 @@ Footer::Footer(const Slice& footerBlock)
 void Footer::encodeTo(std::string* dst, const std::string& metaIndexHandle,
                       const std::string& indexBlockHandle)
 {
-  if (metaIndexHandle.empty() || indexBlockHandle.empty())
+  if (metaIndexHandle.empty() || indexBlockHandle.empty()) {
     printError("Footer: None handle");
+  }
 
-  if (metaIndexHandle.size() + indexBlockHandle.size() > MaxFooterSize - 8)
+  if (metaIndexHandle.size() + indexBlockHandle.size() > MaxFooterSize - 8) {
     printError("handle to bigger to fill");
+  }
 
-  if (dst == nullptr)
+  if (dst == nullptr) {
     printError("Footer: None dst");
+  }
 
   size_t initSize = dst->size();
   dst->append(metaIndexHandle);
@@ -72,21 +75,16 @@ void Footer::encodeTo(std::string* dst, const std::string& metaIndexHandle,
   PutFixed32(dst, static_cast<uint32_t>(TableMagicNumber & 0xffffffffu));
   PutFixed32(dst, static_cast<uint32_t>(TableMagicNumber >> 32));
 
-  if (dst->size() - initSize != MaxFooterSize)
+  if (dst->size() - initSize != MaxFooterSize) {
     printError("Footer: size error");
+  }
 }
 
-inline void Footer::getMetaIndexPosAndSize(uint64_t* pos, uint64_t* size)
-{
-  if (pos != nullptr) *pos = _metaIndexHandle.getPosition();
-  if (size != nullptr) *size = _metaIndexHandle.getSize();
-}
+inline PosAndSize Footer::getMetaIndexPosAndSize() const
+{ return {_metaIndexHandle.getPosition(), _metaIndexHandle.getSize()}; }
 
-inline void Footer::getIndexBlockPosAndSize(uint64_t* pos, uint64_t* size)
-{
-  if (pos != nullptr) *pos = _indexBlockHandle.getPosition();
-  if (size != nullptr) *size = _indexBlockHandle.getSize();
-}
+inline PosAndSize Footer::getIndexBlockPosAndSize() const
+{ return {_indexBlockHandle.getPosition(), _indexBlockHandle.getSize()}; }
 
 }
 
