@@ -6,6 +6,34 @@
 namespace yundb
 {
 
+static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
+                      const std::shared_ptr<FileMeta> f)
+{
+  // null user_key occurs before all keys and is therefore never after *f
+  return (key != nullptr && cmp->cmp(*key, f->largest) > 0); 
+}
+
+static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
+                       const std::shared_ptr<FileMeta> f)
+{
+  // null user_key occurs after all keys and is therefore never before *f
+  return (key != nullptr && cmp->cmp(*key, f->smallest) < 0);
+}
+
+static uint64_t maxBytesForLevel(int level)
+{
+  // Init for 10 MB
+  uint64_t result = 10 * 1048576;
+  
+  while (level > 0)
+  {
+    result *= 10;
+    level--;
+  }
+
+  return result;
+}
+
 int findFile(const std::shared_ptr<Comparator> cmp,
              const std::vector<std::shared_ptr<FileMeta>>& files,
              const Slice& key)
@@ -77,20 +105,6 @@ static size_t totalFileSize(const std::vector<std::shared_ptr<FileMeta>>& files)
   for (auto& f : files)
     sums += f->fileSize;
   return sums;
-}
-
-static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
-                      const std::shared_ptr<FileMeta> f)
-{
-  // null user_key occurs before all keys and is therefore never after *f
-  return (key != nullptr && cmp->cmp(*key, f->largest) > 0); 
-}
-
-static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
-                       const std::shared_ptr<FileMeta> f)
-{
-  // null user_key occurs after all keys and is therefore never before *f
-  return (key != nullptr && cmp->cmp(*key, f->smallest) < 0);
 }
 
 Version::~Version()
@@ -520,20 +534,6 @@ void VersionSet::addLiveFiles(std::set<uint64_t>& liveFiles) const
         liveFiles.insert(f->number);
     }
   }
-}
-
-static uint64_t maxBytesForLevel(int level)
-{
-  // Init for 10 MB
-  uint64_t result = 10 * 1048576;
-  
-  while (level > 0)
-  {
-    result *= 10;
-    level--;
-  }
-
-  return result;
 }
 
 }

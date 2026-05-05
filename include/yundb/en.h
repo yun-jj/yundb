@@ -32,8 +32,6 @@ class Env
 
   static Env* Default();
 
-  Env& operator=(const Env& other) = delete;
-
   virtual void newWritableFile(std::string& fileName, WritableFile** result) = 0;
 
   virtual void newAppendableFile(std::string& fileName, WritableFile** result) = 0;

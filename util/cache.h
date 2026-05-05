@@ -3,9 +3,11 @@
 // Header guard standardized to YUNDB_UTIL_CACHE_H
 
 #include "yundb/options.h"
+#include "yundb/slice.h"
 #include "sync.h"
 
 #include <mutex>
+#include <vector>
 
 namespace yundb
 {

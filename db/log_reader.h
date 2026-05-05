@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "yundb/en.h"
+#include "db/log_format.h"
 
 namespace yundb
 {
@@ -18,7 +19,7 @@ class Reader
   Reader(Reader& other) = delete;
   Reader& operator=(Reader& other) = delete;
   explicit Reader(SequentialFile* file, size_t initialOffset, bool checksum);
-  ~Reader() = default;
+  ~Reader();
 
   size_t lastRecordOffset() const;
 

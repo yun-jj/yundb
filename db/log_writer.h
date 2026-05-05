@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "yundb/en.h"
+#include "db/log_format.h"
 
 class WritableFile;
 

@@ -8,5 +8,5 @@ namespace yundb
 Options::Options()
     : comparator(BytewiseCmp()),
       env(Env::Default()),
-      filter_policy(BloomPolicyFilter()) {}
+  filter_policy(bloomPolicyFilter()) {}
 }

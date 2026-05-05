@@ -184,6 +184,7 @@ void VersionEdit::decode(const Slice& data)
         break;
 
       case NewFile:
+      {
         Slice smallest, largest;
         if (getLevel(&input, &level) && GetVarint64(&input, &f->number) &&
             GetVarint64(&input, &f->fileSize) &&
@@ -197,7 +198,7 @@ void VersionEdit::decode(const Slice& data)
           msg = "new-file entry";
         }
         break;
-
+      }
       default:
         msg = "unknown tag";
         break;

@@ -10,6 +10,7 @@
 #include <queue>
 #include <thread>
 #include <atomic>
+#include <limits>
 
 #include "util/error_print.h"
 #include "util/sync.h"
@@ -217,6 +218,8 @@ class RandomAccessPosixFile final : public RandomAccessFile
       *str = Slice(scratch, static_cast<size_t>(bytes));
       break;
     }
+
+    return true;
   }
   // If permanentFd is false, then _fd = -1
   // If true then the file descriptor is stored in the class,
@@ -455,10 +458,16 @@ class LockFileTable
   std::set<std::string> _lockedFiles;
 };
 
+int getMaxMmapUsage();
+int getMaxOpenFile();
+int LockOrUnlock(int fd, bool lock);
+
+template <typename EnvType>
+class SingleEnv;
+
 class PosixEnv : public Env
 {
  public:
-  PosixEnv();
   PosixEnv()
       : _backGroundWorkCondVar(&_backGroundWorkMutex),
         _startedBackgroundWork(false),
@@ -722,11 +731,7 @@ class PosixEnv : public Env
     thread.detach();
   }
 
-  static Env* Default()
-  {
-    static SinglePosixEnv envContainer;
-    return envContainer.env();
-  }
+  static Env* Default();
  private:
   class BackgroundWork
   {
@@ -823,6 +828,36 @@ std::atomic<bool> SingleEnv<EnvType>::_initialized(false);
 
 using SinglePosixEnv = SingleEnv<PosixEnv>;
 
+Env* PosixEnv::Default()
+{
+  static SinglePosixEnv envContainer;
+  return envContainer.env();
+}
+
+}
+
+Env* Env::Default()
+{
+  return PosixEnv::Default();
+}
+
+Env::Env() = default;
+
+Env::~Env() = default;
+
+bool writeStringToFile(const Slice& data, const std::string& fname)
+{
+  return true;
+}
+
+bool writeStringToFileSync(const Slice& data, const std::string& fname)
+{
+  return true;
+}
+
+bool readFileToString(const std::string& fname, std::string* data)
+{
+  return true;
 }
 
 }

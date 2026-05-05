@@ -125,10 +125,10 @@ void Footer::encodeTo(std::string* dst, const std::string& metaIndexHandle,
   }
 }
 
-inline PosAndSize Footer::getMetaIndexPosAndSize() const
+PosAndSize Footer::getMetaIndexPosAndSize() const
 { return {_metaIndexHandle.getPosition(), _metaIndexHandle.getSize()}; }
 
-inline PosAndSize Footer::getIndexBlockPosAndSize() const
+PosAndSize Footer::getIndexBlockPosAndSize() const
 { return {_indexBlockHandle.getPosition(), _indexBlockHandle.getSize()}; }
 
 }

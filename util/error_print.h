@@ -15,7 +15,7 @@ static std::streambuf* OriginalCerrBuffer = nullptr;
 
 static std::ofstream ErrorFileStream;
 
-bool initializeErrorPrint()
+inline bool initializeErrorPrint()
 {
   if (OriginalCerrBuffer != nullptr) return false; // Already initialized
 
@@ -25,6 +25,12 @@ bool initializeErrorPrint()
   std::cerr.rdbuf(ErrorFileStream.rdbuf());
   return true;
 }
+#endif
+
+#ifndef NDEBUG
+template <typename Arg>
+void printError(Arg arg)
+{ std::cerr << arg << "\n"; }
 #endif
 
 template <typename Arg, typename... Args>
@@ -38,12 +44,6 @@ void printError(Arg arg, Args... args)
   (void)arg; // Silence unused parameter warning
 #endif
 }
-
-#ifndef NDEBUG
-template <typename Arg>
-void printError(Arg arg)
-{ std::cerr << arg << "\n"; }
-#endif
 
 }
 

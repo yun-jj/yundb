@@ -24,6 +24,7 @@ enum RecordType
   MiddleType = 3,
   LastType = 4
 };
+
 constexpr size_t maxRecordType = LastType;
 
 }

@@ -12,6 +12,9 @@
 #include <mutex>
 #include <string>
 
+namespace yundb
+{
+
 namespace sync
 {
 // Thinly wraps std::mutex.
@@ -65,6 +68,8 @@ class LockGuard {
  private:
   LockType& mu_;
 };
+
+}
 
 }
 

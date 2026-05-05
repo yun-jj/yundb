@@ -72,8 +72,8 @@ class Footer
 
   void encodeTo(std::string* input, const std::string& metaIndexHandle,
                 const std::string& indexBlockHandle);
-  inline PosAndSize getMetaIndexPosAndSize() const;
-  inline PosAndSize getIndexBlockPosAndSize() const;
+  PosAndSize getMetaIndexPosAndSize() const;
+  PosAndSize getIndexBlockPosAndSize() const;
 
  private:
   BlockHandle _metaIndexHandle;

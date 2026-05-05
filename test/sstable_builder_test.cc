@@ -44,7 +44,7 @@ TEST_F(SstableBuilderTest, sstableGenerate)
   yundb::WritableFile* file;
   std::string dbName(TEST_TEMP_DIR);
   std::string fileName = yundb::generateTableFileName(666666, dbName);
-  yundb::newWritableFile(fileName, &file);
+  options.env->newWritableFile(fileName, &file);
   yundb::SstableBuilder builder(options, file);
   builder.build(memTable.get());
 }
