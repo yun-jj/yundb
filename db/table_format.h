@@ -18,6 +18,14 @@ constexpr uint64_t TableMagicNumber = 0xbf920e1798aff023ull;
 // First is pos, second is size
 using PosAndSize = std::pair<uint64_t, uint64_t>;
 
+bool decodeIndexEntry(const char* entry,
+                      const char* entryLimit,
+                      const char** key,
+                      uint64_t* keyLen,
+                      const char** value,
+                      uint64_t* valueLen,
+                      const char** next);
+
 // BlockHandle is a pointer to the extent of a file that stores a data
 // block or a meta block.
 class BlockHandle

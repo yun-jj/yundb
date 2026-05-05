@@ -17,20 +17,13 @@ class DataBlockReader
   {
   public:
     Iter(const char* blockStart, const char* restartPtr, const char* restartPtrHead,
-        const char* restartPtrTail);
+         const char* restartPtrTail);
 
     Iter(const Iter& other) = default;
 
-    Iter() 
-        : _block_start(nullptr),
-          _restart_ptr(nullptr),
-          _restart_ptr_head(nullptr),
-          _restart_ptr_tail(nullptr),
-          _start(nullptr),
-          _end(nullptr),
-          _shared_Key_Len(0){}
+    Iter();
 
-    ~Iter(){}
+    ~Iter() = default;
 
     Iter& operator=(const Iter& other) = default;
 
@@ -50,17 +43,9 @@ class DataBlockReader
     bool seek(const Slice& key, const Comparator* comparator,
               int restartInterval, std::string* result);
 
-    std::string getValue(){return _value;}
+    inline std::string getValue();
 
-    std::string getKey()
-    {
-      if (_shared_Key_Len == 0) return _key_Delta;
-      std::string key;
-      key.reserve(_shared_Key_Len + _key_Delta.size());
-      key.append(_head_Key, 0, _shared_Key_Len);
-      key.append(_key_Delta);
-      return key;
-    }
+    inline std::string getKey();
 
   private:
     // Get mid Iter for binary search

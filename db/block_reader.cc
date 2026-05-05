@@ -10,6 +10,15 @@ namespace yundb
 DataBlockReader::DataBlockReader(const Options& options)
     : _options(options) {}
 
+ DataBlockReader::Iter::Iter() 
+      : _block_start(nullptr),
+        _restart_ptr(nullptr),
+        _restart_ptr_head(nullptr),
+        _restart_ptr_tail(nullptr),
+        _start(nullptr),
+        _end(nullptr),
+        _shared_Key_Len(0){}
+
 DataBlockReader::Iter::Iter(const char* blockStart, const char* restartPtr,
                             const char* restartPtrHead, const char* restartPtrTail)
       : _block_start(blockStart),
@@ -24,6 +33,19 @@ DataBlockReader::Iter::Iter(const char* blockStart, const char* restartPtr,
     decodeEntry(blockStart + offset);
   }
   _head_Key = _key_Delta;
+}
+
+std::string DataBlockReader::Iter::getValue()
+{ return _value; }
+
+std::string DataBlockReader::Iter::getKey()
+{
+  if (_shared_Key_Len == 0) return _key_Delta;
+  std::string key;
+  key.reserve(_shared_Key_Len + _key_Delta.size());
+  key.append(_head_Key, 0, _shared_Key_Len);
+  key.append(_key_Delta);
+  return key;
 }
 
 bool DataBlockReader::Iter::operator<(const Iter& other)
@@ -159,7 +181,7 @@ void DataBlockReader::Iter::decodeEntry(const char* start)
 // Key format is | key | seq, type | 
 bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::string* result)
 {
-  if (block.empty() || key.empty() || result->empty())
+  if (block.empty() || key.empty() || result == nullptr)
     printError("DatablockReader: None block, key or result");
 
   const char* data = block.data();

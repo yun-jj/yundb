@@ -6,6 +6,51 @@
 namespace yundb
 {
 
+bool decodeIndexEntry(const char* entry,
+                      const char* entryLimit,
+                      const char** key,
+                      uint64_t* keyLen,
+                      const char** value,
+                      uint64_t* valueLen,
+                      const char** next)
+{
+  if (entry == nullptr || entry >= entryLimit) {
+    return false;
+  }
+
+  uint64_t shared = 0;
+  uint64_t unshared = 0;
+  uint64_t vLen = 0;
+
+  const char* p = entry;
+  p = GetVarint64Ptr(p, entryLimit, &shared);
+  if (p == nullptr) return false;
+
+  p = GetVarint64Ptr(p, entryLimit, &unshared);
+  if (p == nullptr) return false;
+
+  p = GetVarint64Ptr(p, entryLimit, &vLen);
+  if (p == nullptr) return false;
+
+  // Index block is built with restart_interval = 1, so shared must be 0.
+  if (shared != 0) return false;
+
+  if (unshared > static_cast<uint64_t>(entryLimit - p)) return false;
+  const char* k = p;
+  p += unshared;
+
+  if (vLen > static_cast<uint64_t>(entryLimit - p)) return false;
+  const char* v = p;
+  p += vLen;
+
+  *key = k;
+  *keyLen = unshared;
+  *value = v;
+  *valueLen = vLen;
+  *next = p;
+  return true;
+}
+
 std::string BlockHandle::encode(uint64_t position, uint64_t size) const
 {
   // Sanity check that all fields have been set

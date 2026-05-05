@@ -24,7 +24,7 @@ class TableCache
               void (*deleter)(const Slice& key, void* value));
     
   // Find the value of key in specified fileNumber 
-  bool lookup(uint64_t fileNumber, size_t fileSize, const Slice key, void* value);
+  bool lookup(uint64_t fileNumber, size_t fileSize, const Slice key, std::string* value);
 
   // Remove fileNumber entry from cache
   void evict(uint64_t fileNumber);

@@ -6,9 +6,9 @@
 namespace yundb
 {
 
-FilterBlockReader::FilterBlockReader(std::shared_ptr<const FilterPolicy> policy,
+FilterBlockReader::FilterBlockReader(const FilterPolicy* policy,
 																		 const Slice& contents)
-			: _policy(std::move(policy)),
+			: _policy(policy),
 				_contents(contents.data(), contents.size()),
 				_filterData(nullptr),
 				_filterOffsets(nullptr),

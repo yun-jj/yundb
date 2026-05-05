@@ -13,7 +13,7 @@ namespace yundb
 class FilterBlockReader 
 {
  public:
-  FilterBlockReader(std::shared_ptr<const FilterPolicy> policy, const Slice& contents);
+  FilterBlockReader(const FilterPolicy* policy, const Slice& contents);
 
   FilterBlockReader(const FilterBlockReader& other) = delete;
   FilterBlockReader& operator=(const FilterBlockReader& other) = delete;
@@ -25,7 +25,7 @@ class FilterBlockReader
  private:
   uint32_t getFilterOffset(uint32_t index) const;
 
-  std::shared_ptr<const FilterPolicy> _policy;
+  const FilterPolicy* _policy;
   const Slice _contents;
   const char* _filterData;
   const char* _filterOffsets;
