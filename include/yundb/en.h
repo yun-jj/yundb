@@ -32,13 +32,13 @@ class Env
 
   static Env* Default();
 
-  virtual void newWritableFile(std::string& fileName, WritableFile** result) = 0;
+  virtual void newWritableFile(const std::string& fileName, WritableFile** result) = 0;
 
-  virtual void newAppendableFile(std::string& fileName, WritableFile** result) = 0;
+  virtual void newAppendableFile(const std::string& fileName, WritableFile** result) = 0;
 
-  virtual void newSequentialFile(std::string& fileName, SequentialFile** result) = 0;
+  virtual void newSequentialFile(const std::string& fileName, SequentialFile** result) = 0;
 
-  virtual void newRandomAccessFile(std::string& fileName, RandomAccessFile** result) = 0;
+  virtual void newRandomAccessFile(const std::string& fileName, RandomAccessFile** result) = 0;
 
   // Returns true iff the named file exists.
   virtual bool fileExists(const std::string& fileName) = 0;
@@ -158,11 +158,11 @@ class FileLock
   virtual ~FileLock() = default;
 };
 
-bool writeStringToFile(const Slice& data, const std::string& fname);
+bool writeStringToFile(Env* env, const Slice& data, const std::string& fileName);
 
-bool writeStringToFileSync(const Slice& data, const std::string& fname);
+bool writeStringToFileSync(Env* env, const Slice& data, const std::string& fileName);
 
-bool readFileToString(const std::string& fname, std::string* data);
+bool readFileToString(Env* env, const std::string& fileName, std::string* data);
 
 }
 

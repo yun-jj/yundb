@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <limits>
+#include <memory>
 
 #include "util/error_print.h"
 #include "util/sync.h"
@@ -479,7 +480,7 @@ class PosixEnv : public Env
     std::abort();
   }
 
-  void newWritableFile(std::string& fileName, WritableFile** result) override
+  void newWritableFile(const std::string& fileName, WritableFile** result) override
   {
     int fd = ::open(fileName.c_str(),
                     O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
@@ -499,7 +500,7 @@ class PosixEnv : public Env
     }
   }
 
-  void newAppendableFile(std::string& fileName, WritableFile** result) override
+  void newAppendableFile(const std::string& fileName, WritableFile** result) override
   {
     int fd = ::open(fileName.c_str(),
                     O_WRONLY | O_CREAT | OpenBaseFlags, 0644);
@@ -519,7 +520,7 @@ class PosixEnv : public Env
     }
   }
 
-  void newSequentialFile(std::string& fileName, SequentialFile** result) override
+  void newSequentialFile(const std::string& fileName, SequentialFile** result) override
   {
     int fd = ::open(fileName.c_str(), O_RDONLY | OpenBaseFlags);
     if(fd < 0)
@@ -538,7 +539,7 @@ class PosixEnv : public Env
     }
   }
 
-  void newRandomAccessFile(std::string& fileName, RandomAccessFile** result) override
+  void newRandomAccessFile(const std::string& fileName, RandomAccessFile** result) override
   {
     int fd = ::open(fileName.c_str(), O_RDONLY | OpenBaseFlags);
     if (fd < 0)
@@ -845,19 +846,56 @@ Env::Env() = default;
 
 Env::~Env() = default;
 
-bool writeStringToFile(const Slice& data, const std::string& fname)
+static bool doWriteStringToFile(Env* env, const Slice& data, const std::string& fname, bool sync)
 {
+  if (env ==nullptr) {
+    printError("env is nullptr\n");
+    return false;
+  }
+  WritableFile* file;
+  env->newWritableFile(fname, &file);
+
+  if (file == nullptr) {
+    printError("env->newWritableFile failed for file: %s\n", fname.c_str());
+    return false;
+  }
+
+  file->append(data);
+  if (sync) file->sync();
+  file->close();
+  delete file;
   return true;
 }
 
-bool writeStringToFileSync(const Slice& data, const std::string& fname)
-{
-  return true;
-}
+bool writeStringToFile(Env* env, const Slice& data, const std::string& fileName)
+{ return doWriteStringToFile(env, data, fileName, false); }
 
-bool readFileToString(const std::string& fname, std::string* data)
+bool writeStringToFileSync(Env* env, const Slice& data, const std::string& fileName)
+{ return doWriteStringToFile(env, data, fileName, true); }
+
+bool readFileToString(Env* env, const std::string& fileName, std::string* data)
 {
-  return true;
+  if (env == nullptr) {
+    printError("env is nullptr\n");
+    return false;
+  }
+  data->clear();
+  SequentialFile* file;
+  env->newSequentialFile(fileName, &file);
+
+  if (file == nullptr) {
+    printError("env->newSequentialFile failed for file: %s\n", fileName.c_str());
+    return false;
+  }
+
+  char scratch[65536];
+  Slice readResult;
+  data->clear();
+  while (file->read(&readResult, scratch, sizeof(scratch))) {
+    data->append(readResult.data(), readResult.size());
+  }
+  delete file;
+  return true; 
 }
 
 }
