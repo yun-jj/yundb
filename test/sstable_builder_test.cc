@@ -8,8 +8,6 @@
 
 #include <gtest/gtest.h>
 
-#define TEST_TEMP_DIR "./tmp"
-
 class SstableBuilderTest : public testing::Test
 {
  public:
@@ -27,7 +25,6 @@ SstableBuilderTest::SstableBuilderTest()
 {
   options.comparator = yundb::BytewiseCmp();
   memTable = std::make_shared<yundb::MemTable>(arena, options);
-  
 }
 
 TEST_F(SstableBuilderTest, sstableGenerate)

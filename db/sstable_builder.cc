@@ -128,8 +128,6 @@ void SstableBuilder::build(const MemTable* memtable)
   std::string footerBlock;
   footer.encodeTo(&footerBlock, metaIndexHandle, indexBlockHandle);
   writeRawBlock(footerBlock, NoCompression);
-
-  delete memtable;
 }
 
 }
