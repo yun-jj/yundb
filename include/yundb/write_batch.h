@@ -2,6 +2,7 @@
 #define YUNDB_INCLUDE_YUNDB_DB_H
 
 #include "slice.h"
+#include "memtable.h"
 
 namespace yundb
 {
@@ -27,6 +28,11 @@ class WriteBatch
   // Clear all updates buffered in this batch.
   void clear();
 
+  // Insert all of the updates from "rep_" into this batch.
+  // seq is first sequence number for the first update in this batch.
+  // Returns SequenceNumber of next new Sequence.
+  SequenceNumber insert(MemTable* memtable, SequenceNumber seq) const;
+
   // The size of the database changes caused by this batch.
   //
   // This number is tied to implementation details, and may change across
@@ -41,7 +47,12 @@ class WriteBatch
   void append(const WriteBatch& source);
 
  private:
+  // Get the number of entries in this batch.
+  uint32_t count() const;
+  // Store the number of entries in this batch.
+  void setCount(uint32_t n);
   // See comment in write_batch.cc for the format of rep_
+  // Sequence number for this batch need user to put in the header of rep_
   std::string rep_;  
 };
 
