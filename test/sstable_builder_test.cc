@@ -5,8 +5,12 @@
 #include "util/file_name.h"
 #include "yundb/en.h"
 #include "yundb/comparator.h"
+#include "util/cache.h"
+#include "db/table_cache.h"
+
 
 #include <gtest/gtest.h>
+#include <map>
 
 class SstableBuilderTest : public testing::Test
 {
@@ -17,7 +21,9 @@ class SstableBuilderTest : public testing::Test
   std::shared_ptr<yundb::Arena> arena; 
   std::shared_ptr<yundb::MemTable> memTable;
   StringGenerater generater;
-  
+  std::string dbName;
+  std::string fileName;
+  std::map<std::string, std::string> kvMap; 
 };
 
 SstableBuilderTest::SstableBuilderTest()
@@ -25,6 +31,8 @@ SstableBuilderTest::SstableBuilderTest()
 {
   options.comparator = yundb::BytewiseCmp();
   memTable = std::make_shared<yundb::MemTable>(arena, options);
+  dbName = TEST_TEMP_DIR;
+  fileName = yundb::generateTableFileName(666666, dbName);
 }
 
 TEST_F(SstableBuilderTest, sstableGenerate)
@@ -33,15 +41,41 @@ TEST_F(SstableBuilderTest, sstableGenerate)
 
   while (memTable->getMemoryUsage() <= options.write_buffer_size)
   {
-    memTable->add(seq , yundb::ValueType::TypeValue,
-                  generater.getRandString(), generater.getRandString());
+    std::string key = generater.getRandString();
+    std::string value = generater.getRandString();
+    kvMap[key] = value;
+    memTable->add(seq , yundb::ValueType::TypeValue, key, value);
     seq++;
   }
 
   yundb::WritableFile* file;
-  std::string dbName(TEST_TEMP_DIR);
-  std::string fileName = yundb::generateTableFileName(666666, dbName);
   options.env->newWritableFile(fileName, &file);
   yundb::SstableBuilder builder(options, file);
   builder.build(memTable.get());
+}
+
+TEST_F(SstableBuilderTest, sstableRead)
+{
+  yundb::SequenceNumber seq;
+  yundb::RandomAccessFile* file = nullptr;
+  options.env->newRandomAccessFile(fileName, &file);
+
+  yundb::TableCache tableCache(dbName, options,
+                               std::make_shared<yundb::Cache>(options.max_cache_size));
+  
+  // Insert file into cache, so we can read data from cache when lookup
+  tableCache.insert(666666, file, 0, [](const yundb::Slice& key, void* value) {
+    (void)value; // do nothing, just for test
+  });
+
+  size_t fileSize;
+  options.env->getFileSize(fileName, &fileSize);
+
+  for (const auto& kv : kvMap)
+  {
+    std::string value;
+    bool found = tableCache.lookup(666666, fileSize, kv.first, &value);
+    EXPECT_TRUE(found);
+    EXPECT_EQ(value, kv.second);
+  }
 }

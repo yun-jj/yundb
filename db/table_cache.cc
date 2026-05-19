@@ -186,7 +186,7 @@ Slice TableCache::getIndexBlock(const Footer& footer, const char* data)
 }
 
 TableCache::TableCache(const std::string& dbname, const Options& options,
-                         std::shared_ptr<Cache> cache)
+                       std::shared_ptr<Cache> cache)
     : _cache(std::move(cache)), _options(options), _dbname(dbname) {}
 
 TableCache::~TableCache() = default;

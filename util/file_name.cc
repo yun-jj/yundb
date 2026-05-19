@@ -96,7 +96,7 @@ bool setCurrentFile(Env* env, const std::string& dbname,
 
   content.removePrefix(dbname.size() + 1);
   std::string tmp = generateTempFileName(descriptorNumber, dbname);
-  bool result = writeStringToFileSync(content.toString() + "\n", tmp); 
+  bool result = writeStringToFileSync(env, content.toString() + "\n", tmp); 
 
   if (result)
   {

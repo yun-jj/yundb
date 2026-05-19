@@ -49,7 +49,7 @@ SequenceNumber WriteBatch::insert(MemTable* memtable, SequenceNumber seq) const
   Slice input(rep_);
   if (input.size() < HeaderSize) {
     printError("WriteBatch::insert: malformed WriteBatch");
-    return;
+    return seq;
   }
 
   input.removePrefix(HeaderSize);
