@@ -151,38 +151,55 @@ Slice IndexBlockIterator::value() const
 }
 
 
-Slice TableCache::getFilterBlock(const Footer& footer, const char* data)
+bool TableCache::getFilterBlock(const Footer& footer, RandomAccessFile* file, std::string* result)
 {
+  if (result == nullptr) {
+    printError("TableCache: None value ptr");
+    return false;
+  }
+  result->clear();
   PosAndSize p = footer.getMetaIndexPosAndSize();
-  Slice metaIndexBlock(data + p.first, p.second);
-  const char* filterPolicyName = _options.filter_policy->Name();
-  size_t filterNameSize = std::strlen(filterPolicyName);
+  Slice metaIndexBlock;
+  char data[_options.block_size];
 
-  if (metaIndexBlock.size() < filterNameSize) {
-    printError("TableCache: meta index block size error");
-    return Slice();
-  }
+  file->read(p.first, &metaIndexBlock, data, p.second);
 
-  if (std::memcmp(metaIndexBlock.data(),filterPolicyName, filterNameSize) != 0)
-  {
+  const char* ptr = _options.filter_policy->Name();
+  size_t filterNameSize = std::strlen(ptr);
+
+  if (std::memcmp(metaIndexBlock.data(), ptr, filterNameSize) != 0) {
     printError("TableCache: filter policy name not match");
-    return Slice();
+    return false;
   }
 
-  const char* ptr = metaIndexBlock.data() + filterNameSize;
+  ptr = metaIndexBlock.data() + filterNameSize;
 
   BlockHandle filterBlockHandle;
   filterBlockHandle.decodeFrom(ptr);
   uint64_t filterBlockPos = filterBlockHandle.getPosition();
   uint64_t filterBlockSize = filterBlockHandle.getSize();
 
-  return Slice(data + filterBlockPos, filterBlockSize);
+  Slice filterBlock;
+  if (!file->read(filterBlockPos, &filterBlock, data, filterBlockSize)) {
+    printError("TableCache: read filter block error");
+    return false;
+  }
+
+  result->assign(filterBlock.data(), filterBlock.size());
+  return true;
 }
 
-Slice TableCache::getIndexBlock(const Footer& footer, const char* data)
+bool TableCache::getIndexBlock(const Footer& footer, RandomAccessFile* file, std::string* result)
 {
   PosAndSize p = footer.getIndexBlockPosAndSize();
-  return Slice(data + p.first, p.second);
+  Slice indexBlock;
+  char data[_options.block_size];
+  if (!file->read(p.first, &indexBlock, data, p.second)) {
+    printError("TableCache: read index block error");
+    return false;
+  }
+  result->assign(indexBlock.data(), indexBlock.size());
+  return true;
 }
 
 TableCache::TableCache(const std::string& dbname, const Options& options,
@@ -191,11 +208,10 @@ TableCache::TableCache(const std::string& dbname, const Options& options,
 
 TableCache::~TableCache() = default;
 
-void TableCache::insert(uint64_t fileNumber, void* value, size_t valueSize,
-                        void (*deleter)(const Slice& key, void* value))
-{
-  char* key = reinterpret_cast<char*>(&fileNumber);
-  _cache->insert(Slice(key, FileNumberSize), value, FileNumberSize + valueSize, deleter);
+void TableCache::insert(uint64_t fileNumber, RandomAccessFile* value, size_t valueSize,
+                        void (*deleter)(const Slice& key, void* value)) {
+  _cache->insert(Slice(reinterpret_cast<char*>(&fileNumber), FileNumberSize),
+                 reinterpret_cast<char*>(value), FileNumberSize + valueSize, deleter);
 }
 
 bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, std::string* value)
@@ -212,36 +228,56 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
 
   value->clear();
   char* fileNumberKey = reinterpret_cast<char*>(&fileNumber);
-  char* result = static_cast<char*>(_cache->lookup(Slice(fileNumberKey, FileNumberSize)));
+  auto randomAccessTable = static_cast<RandomAccessFile*>(
+    _cache->lookup(Slice(fileNumberKey, FileNumberSize))
+  );
 
-  if (result == nullptr) return false;
+  if (randomAccessTable == nullptr) return false;
 
-  Footer footer(Slice(result + fileSize - Footer::MaxFooterSize,
-                      Footer::MaxFooterSize));
+  Slice fileData;
+  char scratch[Footer::MaxFooterSize];
 
-  Slice FilterBlock = getFilterBlock(footer, result);
-  Slice indexBlock = getIndexBlock(footer, result);
-  
-  FilterBlockReader filterBlockReader(_options.filter_policy, FilterBlock);
-  IndexBlockIterator indexBlockIter(indexBlock.data(), indexBlock.data() + indexBlock.size());
+  if (!randomAccessTable->read(fileSize - Footer::MaxFooterSize, &fileData, scratch,
+                    Footer::MaxFooterSize)) {
+    printError("TableCache: read file error");
+    return false;
+  }
+
+  Footer footer(fileData);
+  std::string fileterBlock;
+  std::string indexBlock;
+
+  getFilterBlock(footer, randomAccessTable, &fileterBlock);
+  getIndexBlock(footer, randomAccessTable, &indexBlock);
+
+  FilterBlockReader filterBlockReader(
+    _options.filter_policy,
+    Slice(fileterBlock.data(), fileterBlock.size())
+  );
+  IndexBlockIterator indexBlockIter(
+    indexBlock.data(),
+    indexBlock.data() + indexBlock.size()
+  );
+
   indexBlockIter.seek(key);
 
-  if (indexBlockIter.valid())
+  if (indexBlockIter.valid() && filterBlockReader.keyMayMatch(indexBlockIter.index(), key))
   {
+    DataBlockReader dataBlockReader(_options);
     Slice dataBlockHandle = indexBlockIter.value();
     BlockHandle handle;
     handle.decodeFrom(dataBlockHandle.data());
+    Slice dataBlock;
+    char dataBlockScratch[_options.block_size];
 
-    if (filterBlockReader.keyMayMatch(indexBlockIter.index(), key)) {
-      DataBlockReader dataBlockReader(_options);
-      if (dataBlockReader.queryValue(Slice(result + handle.getPosition(), handle.getSize()),
-                                     key, value)) {
-        return true;
-      } else {
-        return false;
-      }
-    } else {
+    if (!randomAccessTable->read(handle.getPosition(), &dataBlock, dataBlockScratch,
+                                 handle.getSize())) {
+      printError("TableCache: read data block error");
       return false;
+    }
+    
+    if (dataBlockReader.queryValue(dataBlock, key, value)) {
+      return true;
     }
   }
 

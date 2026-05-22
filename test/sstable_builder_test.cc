@@ -52,19 +52,37 @@ TEST_F(SstableBuilderTest, sstableGenerate)
   options.env->newWritableFile(fileName, &file);
   yundb::SstableBuilder builder(options, file);
   builder.build(memTable.get());
+
+  if (options.env->fileExists(dbName + fileName))
+    options.env->removeFile(dbName + fileName);
 }
 
 TEST_F(SstableBuilderTest, sstableRead)
 {
   yundb::SequenceNumber seq;
-  yundb::RandomAccessFile* file = nullptr;
-  options.env->newRandomAccessFile(fileName, &file);
+  yundb::WritableFile* writeFile;
+  yundb::RandomAccessFile* randomAccessfile = nullptr;
+
+  while (memTable->getMemoryUsage() <= options.write_buffer_size)
+  {
+    std::string key = generater.getRandString();
+    std::string value = generater.getRandString();
+    kvMap[key] = value;
+    memTable->add(seq , yundb::ValueType::TypeValue, key, value);
+    seq++;
+  }
+
+  options.env->newWritableFile(fileName, &writeFile);
+  yundb::SstableBuilder builder(options, writeFile);
+  builder.build(memTable.get());
+
+  options.env->newRandomAccessFile(fileName, &randomAccessfile);
 
   yundb::TableCache tableCache(dbName, options,
                                std::make_shared<yundb::Cache>(options.max_cache_size));
   
   // Insert file into cache, so we can read data from cache when lookup
-  tableCache.insert(666666, file, 0, [](const yundb::Slice& key, void* value) {
+  tableCache.insert(666666, , 0, [](const yundb::Slice& key, void* value) {
     (void)value; // do nothing, just for test
   });
 

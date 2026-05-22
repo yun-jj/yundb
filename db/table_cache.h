@@ -20,7 +20,7 @@ class TableCache
   ~TableCache();
 
   // Deleter is the function to delete this key-value pair when evicted from cache
-  void insert(uint64_t fileNumber, void* value, size_t valueSize,
+  void insert(uint64_t fileNumber, RandomAccessFile* value, size_t valueSize,
               void (*deleter)(const Slice& key, void* value));
     
   // Find the value of key in specified fileNumber 
@@ -32,8 +32,8 @@ class TableCache
   void changeOptions(const Options& options);
 
  private:
-  Slice getFilterBlock(const Footer& footer, const char* data);
-  Slice getIndexBlock(const Footer& footer, const char* data);
+  bool getFilterBlock(const Footer& footer,  RandomAccessFile* file, std::string* result);
+  bool getIndexBlock(const Footer& footer, RandomAccessFile* file, std::string* result);
   std::shared_ptr<Cache> _cache;
   Options _options;
   std::string _dbname;

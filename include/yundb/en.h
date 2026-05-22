@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <cerrno>      
-#include <cstring> 
+#include <cerrno>
+#include <cstring>
 #include <memory>
 
 #include "slice.h"
@@ -121,12 +121,11 @@ class RandomAccessFile
   RandomAccessFile& operator=(const RandomAccessFile& other) = delete;
   virtual ~RandomAccessFile() = default;
   // Read up to "n" bytes from the file starting at "offset".
-  // "scratch[0..n-1]" may be written by this routine.  Sets "*result"
+  // "scratch[0..n-1]" may be written by this routine.  Sets "*str"
   // to the data that was read (including if fewer than "n" bytes were
-  // successfully read).  May set "*result" to point at data in
+  // successfully read).  May set "*str" to point at data in
   // "scratch[0..n-1]", so "scratch[0..n-1]" must be live when
-  // "*result" is used.  If an error was encountered, returns a non-OK
-  // status.
+  // "*str" is used.  If an error was encountered, return false
   //
   // Safe for concurrent use by multiple threads.
   virtual bool read(uint64_t offset, Slice* str,
