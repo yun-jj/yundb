@@ -82,12 +82,17 @@ TEST_F(SstableBuilderTest, sstableRead)
                                std::make_shared<yundb::Cache>(options.max_cache_size));
   
   // Insert file into cache, so we can read data from cache when lookup
-  tableCache.insert(666666, , 0, [](const yundb::Slice& key, void* value) {
-    (void)value; // do nothing, just for test
-  });
-
-  size_t fileSize;
+  uint64_t fileSize = 0;
   options.env->getFileSize(fileName, &fileSize);
+
+  tableCache.insert(
+    666666,
+    randomAccessfile,
+    fileSize,
+    [](const yundb::Slice& key, void* value) {
+      (void)value; // do nothing, just for test
+    }
+  );
 
   for (const auto& kv : kvMap)
   {
