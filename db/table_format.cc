@@ -84,8 +84,8 @@ Footer::Footer(const Slice& footerBlock)
   const char* data = footerBlock.data();
 
   uint32_t flag1, flag2;
-  flag1 = DecodeFixed32(data + BlockHandle::kMaxEncodedLength * 2);
 
+  flag1 = DecodeFixed32(data + BlockHandle::kMaxEncodedLength * 2);
   if (static_cast<uint32_t>(TableMagicNumber & 0xffffffffu) != flag1)
     printError("Footer: flag number error");
 

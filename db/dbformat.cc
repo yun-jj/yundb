@@ -1,6 +1,10 @@
 #include "dbformat.h"
+
 #include "yundb/options.h"
 #include "util/coding.h"
+#include "util/crc32c.h"
+#include "util/snappy_wrapper.h"
+
 
 namespace yundb
 {
@@ -17,6 +21,40 @@ void decodeSeqAndType(const char* data, SequenceNumber* seq, ValueType* type)
   uint64_t seqAndType = DecodeFixed64(data);
   if (seq != nullptr) *seq = static_cast<SequenceNumber>(seqAndType >> 8);
   if (type != nullptr) *type = static_cast<ValueType>(seqAndType & 0xff);
+}
+
+CompressionType checkBlock(const Slice& block)
+{
+  if (block.size() < BlockTrailerSize) {
+    printError("CheckBlock: block size less than trailer size");
+  }
+
+  char type = block.data()[block.size() - BlockTrailerSize];
+  uint32_t crc = DecodeFixed32(block.data() + block.size() - BlockTrailerSize + 1);
+  uint32_t actualCrc = crc32c::Value(block.data(), block.size() - BlockTrailerSize);
+  if (crc != actualCrc) printError("CheckBlock: crc error");
+  return static_cast<CompressionType>(type);
+}
+
+std::string uncompressBlock(const Slice& block, CompressionType type)
+{
+  std::string result(block.size(), 0);
+
+  switch (type)
+  {
+  case NoCompression:
+    result.assign(block.data(), block.size() - BlockTrailerSize);
+    break;
+  case SnappyCompression:
+    if (!Snappy_Uncompress(block.data(), block.size() - BlockTrailerSize, &result[0])) {
+      printError("DecompressBlock: snappy uncompress error");
+    }
+    break;
+  default:
+    printError("DecompressBlock: unknown compression type");
+  }
+
+  return result;
 }
 
 InternalComparator::InternalComparator(const Options& options)

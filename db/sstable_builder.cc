@@ -25,7 +25,7 @@ SstableBuilder::SstableBuilder(Options& options, WritableFile* file)
 
 SstableBuilder::~SstableBuilder() {}
 
-size_t SstableBuilder::writeBlock(std::string& block)
+size_t SstableBuilder::writeBlock(const Slice& block)
 {
   auto type = _options.compression;
   std::string compressionBlock;
@@ -41,10 +41,9 @@ size_t SstableBuilder::writeBlock(std::string& block)
   case SnappyCompression:
   {
     if (Snappy_Compress(block.data(), block.size(), &compressionBlock) && 
-        compressionBlock.size() < block.size() - (block.size() / 8u))
+        compressionBlock.size() < block.size() - (block.size() / 8u)) {
       writeData = compressionBlock; 
-    else
-    {
+    } else {
       writeData = block;
       type = NoCompression;
     }
@@ -102,25 +101,29 @@ void SstableBuilder::build(const MemTable* memtable)
     iter++;
   }
   
-  if (_data_block_builder.getSize() != 0)
+  if (_data_block_builder.getSize() != 0) {
     flushBlock();
+  }
 
   // Write filter block
   size_t oldBlockPos = _cur_block_position;
   Slice filterBlock = _filter_block_builder.finish();
   writeRawBlock(filterBlock, NoCompression);
+  // writeBlock(filterBlock);
   std::string filterHandle(_options.filter_policy->Name());
   filterHandle += _handle_builder.encode(oldBlockPos, filterBlock.size());
 
   // Write meta index block
   oldBlockPos = _cur_block_position;
   writeRawBlock(filterHandle, NoCompression);
+  // writeBlock(filterBlock);
   std::string metaIndexHandle = _handle_builder.encode(oldBlockPos, filterHandle.size());
 
   // Write index block
   oldBlockPos = _cur_block_position;
   std::string indexBlock = _index_block_builder.finish();
   writeRawBlock(indexBlock, NoCompression);
+  // writeBlock(indexBlock);
   std::string indexBlockHandle = _handle_builder.encode(oldBlockPos, indexBlock.size());
 
   // Write footer
@@ -128,6 +131,7 @@ void SstableBuilder::build(const MemTable* memtable)
   std::string footerBlock;
   footer.encodeTo(&footerBlock, metaIndexHandle, indexBlockHandle);
   writeRawBlock(footerBlock, NoCompression);
+  // writeBlock(footerBlock);
 }
 
 }

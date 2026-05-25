@@ -58,6 +58,11 @@ uint64_t packSeqAndType(SequenceNumber seq, ValueType type);
 // Set nullptr for seq or type meaning you dont want get
 void decodeSeqAndType(const char* data, SequenceNumber* seq, ValueType* type);
 
+// Check the block crc and return the compression type
+CompressionType checkBlock(const Slice& block);
+
+// Remove trailer and uncompress block if needed
+std::string uncompressBlock(const Slice& block, CompressionType type);
 
 // Decode format | key | seq, type |
 Slice decodeKey(const Slice& entry);

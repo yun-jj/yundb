@@ -43,7 +43,6 @@ TEST_F(SstableBuilderTest, sstableGenerate)
   {
     std::string key = generater.getRandString();
     std::string value = generater.getRandString();
-    kvMap[key] = value;
     memTable->add(seq , yundb::ValueType::TypeValue, key, value);
     seq++;
   }
@@ -53,8 +52,9 @@ TEST_F(SstableBuilderTest, sstableGenerate)
   yundb::SstableBuilder builder(options, file);
   builder.build(memTable.get());
 
-  if (options.env->fileExists(dbName + fileName))
-    options.env->removeFile(dbName + fileName);
+  if (options.env->fileExists(fileName)) {
+    options.env->removeFile(fileName);
+  }
 }
 
 TEST_F(SstableBuilderTest, sstableRead)
@@ -100,5 +100,9 @@ TEST_F(SstableBuilderTest, sstableRead)
     bool found = tableCache.lookup(666666, fileSize, kv.first, &value);
     EXPECT_TRUE(found);
     EXPECT_EQ(value, kv.second);
+  }
+
+  if (options.env->fileExists(fileName)) {
+    options.env->removeFile(fileName);
   }
 }

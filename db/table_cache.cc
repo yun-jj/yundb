@@ -3,6 +3,7 @@
 #include "db/block_reader.h"
 #include "db/filter_block_reader.h"
 #include "db/table_format.h"
+#include "db/dbformat.h"
 #include "util/coding.h"
 
 #include <cstring>
@@ -235,15 +236,19 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
   if (randomAccessTable == nullptr) return false;
 
   Slice fileData;
-  char scratch[Footer::MaxFooterSize];
+  char scratch[Footer::MaxFooterSize + BlockTrailerSize];
 
-  if (!randomAccessTable->read(fileSize - Footer::MaxFooterSize, &fileData, scratch,
-                    Footer::MaxFooterSize)) {
+  if (!randomAccessTable->read(fileSize - Footer::MaxFooterSize + BlockTrailerSize,
+                               &fileData, scratch, sizeof(scratch))) {
     printError("TableCache: read file error");
     return false;
   }
 
-  Footer footer(fileData);
+  CompressionType type = checkBlock(fileData);
+  std::string uncompressedData = uncompressBlock(fileData, type);
+
+  Footer footer(uncompressedData);
+  // Coding
   std::string fileterBlock;
   std::string indexBlock;
 
