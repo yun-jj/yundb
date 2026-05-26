@@ -159,21 +159,23 @@ bool TableCache::getFilterBlock(const Footer& footer, RandomAccessFile* file, st
     return false;
   }
   result->clear();
+
   PosAndSize p = footer.getMetaIndexPosAndSize();
   Slice metaIndexBlock;
-  char data[_options.block_size];
+  std::string uncompressData;
+  char data[_options.block_size + BlockTrailerSize];
 
   file->read(p.first, &metaIndexBlock, data, p.second);
-
+  uncompressData = uncompressBlock(metaIndexBlock, checkBlock(metaIndexBlock));
   const char* ptr = _options.filter_policy->Name();
   size_t filterNameSize = std::strlen(ptr);
 
-  if (std::memcmp(metaIndexBlock.data(), ptr, filterNameSize) != 0) {
+  if (std::memcmp(uncompressData.data(), ptr, filterNameSize) != 0) {
     printError("TableCache: filter policy name not match");
     return false;
   }
 
-  ptr = metaIndexBlock.data() + filterNameSize;
+  ptr = uncompressData.data() + filterNameSize;
 
   BlockHandle filterBlockHandle;
   filterBlockHandle.decodeFrom(ptr);
@@ -186,20 +188,26 @@ bool TableCache::getFilterBlock(const Footer& footer, RandomAccessFile* file, st
     return false;
   }
 
-  result->assign(filterBlock.data(), filterBlock.size());
+  *result = uncompressBlock(filterBlock, checkBlock(filterBlock));
   return true;
 }
 
 bool TableCache::getIndexBlock(const Footer& footer, RandomAccessFile* file, std::string* result)
 {
+  if (result == nullptr) {
+    printError("TableCache: None value ptr");
+    return false;
+  }
+  result->clear();
+
   PosAndSize p = footer.getIndexBlockPosAndSize();
   Slice indexBlock;
-  char data[_options.block_size];
+  char data[_options.block_size + BlockTrailerSize];
   if (!file->read(p.first, &indexBlock, data, p.second)) {
     printError("TableCache: read index block error");
     return false;
   }
-  result->assign(indexBlock.data(), indexBlock.size());
+  *result = uncompressBlock(indexBlock, checkBlock(indexBlock));
   return true;
 }
 
@@ -236,24 +244,29 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
   if (randomAccessTable == nullptr) return false;
 
   Slice fileData;
-  char scratch[Footer::MaxFooterSize + BlockTrailerSize];
+  char scratch[_options.block_size + BlockTrailerSize];
 
-  if (!randomAccessTable->read(fileSize - Footer::MaxFooterSize + BlockTrailerSize,
-                               &fileData, scratch, sizeof(scratch))) {
+  if (!randomAccessTable->read(fileSize - Footer::MaxFooterSize - BlockTrailerSize,
+                               &fileData, scratch, Footer::MaxFooterSize + BlockTrailerSize)) {
     printError("TableCache: read file error");
     return false;
   }
 
-  CompressionType type = checkBlock(fileData);
-  std::string uncompressedData = uncompressBlock(fileData, type);
-
+  std::string uncompressedData = uncompressBlock(fileData, checkBlock(fileData));
   Footer footer(uncompressedData);
-  // Coding
+
   std::string fileterBlock;
   std::string indexBlock;
 
-  getFilterBlock(footer, randomAccessTable, &fileterBlock);
-  getIndexBlock(footer, randomAccessTable, &indexBlock);
+  if (!getFilterBlock(footer, randomAccessTable, &fileterBlock)) {
+    printError("TableCache: get filter block error");
+    return false;
+  }
+
+  if (!getIndexBlock(footer, randomAccessTable, &indexBlock)) {
+    printError("TableCache: get index block error");
+    return false;
+  }
 
   FilterBlockReader filterBlockReader(
     _options.filter_policy,
@@ -271,17 +284,17 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
     DataBlockReader dataBlockReader(_options);
     Slice dataBlockHandle = indexBlockIter.value();
     BlockHandle handle;
-    handle.decodeFrom(dataBlockHandle.data());
     Slice dataBlock;
-    char dataBlockScratch[_options.block_size];
+    handle.decodeFrom(dataBlockHandle.data());
 
-    if (!randomAccessTable->read(handle.getPosition(), &dataBlock, dataBlockScratch,
+    if (!randomAccessTable->read(handle.getPosition(), &dataBlock, scratch,
                                  handle.getSize())) {
       printError("TableCache: read data block error");
       return false;
     }
-    
-    if (dataBlockReader.queryValue(dataBlock, key, value)) {
+    uncompressedData = uncompressBlock(dataBlock, checkBlock(dataBlock));
+
+    if (dataBlockReader.queryValue(uncompressedData, key, value)) {
       return true;
     }
   }

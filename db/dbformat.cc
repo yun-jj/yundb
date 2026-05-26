@@ -31,7 +31,9 @@ CompressionType checkBlock(const Slice& block)
 
   char type = block.data()[block.size() - BlockTrailerSize];
   uint32_t crc = DecodeFixed32(block.data() + block.size() - BlockTrailerSize + 1);
+  crc = crc32c::Unmask(crc);
   uint32_t actualCrc = crc32c::Value(block.data(), block.size() - BlockTrailerSize);
+  actualCrc = crc32c::Extend(actualCrc, &type, 1);
   if (crc != actualCrc) printError("CheckBlock: crc error");
   return static_cast<CompressionType>(type);
 }

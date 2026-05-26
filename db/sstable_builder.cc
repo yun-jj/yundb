@@ -51,11 +51,10 @@ size_t SstableBuilder::writeBlock(const Slice& block)
   }
   } 
 
-  writeRawBlock(writeData, type);
-  return writeData.size();
+  return writeRawBlock(writeData, type);
 }
 
-void SstableBuilder::writeRawBlock(const Slice& block, CompressionType type)
+size_t SstableBuilder::writeRawBlock(const Slice& block, CompressionType type)
 {
   // Write blcok
   _file->append(block);
@@ -69,6 +68,7 @@ void SstableBuilder::writeRawBlock(const Slice& block, CompressionType type)
   _file->append(Slice(trailer, BlockTrailerSize));
   // Update position
   _cur_block_position += block.size() + BlockTrailerSize;
+  return block.size() + BlockTrailerSize;
 }
 
 void SstableBuilder::flushBlock()
@@ -108,30 +108,26 @@ void SstableBuilder::build(const MemTable* memtable)
   // Write filter block
   size_t oldBlockPos = _cur_block_position;
   Slice filterBlock = _filter_block_builder.finish();
-  writeRawBlock(filterBlock, NoCompression);
-  // writeBlock(filterBlock);
+  writeBlock(filterBlock);
   std::string filterHandle(_options.filter_policy->Name());
   filterHandle += _handle_builder.encode(oldBlockPos, filterBlock.size());
 
   // Write meta index block
   oldBlockPos = _cur_block_position;
-  writeRawBlock(filterHandle, NoCompression);
-  // writeBlock(filterBlock);
+  writeBlock(filterBlock);
   std::string metaIndexHandle = _handle_builder.encode(oldBlockPos, filterHandle.size());
 
   // Write index block
   oldBlockPos = _cur_block_position;
   std::string indexBlock = _index_block_builder.finish();
-  writeRawBlock(indexBlock, NoCompression);
-  // writeBlock(indexBlock);
+  writeBlock(indexBlock);
   std::string indexBlockHandle = _handle_builder.encode(oldBlockPos, indexBlock.size());
 
   // Write footer
   Footer footer;
   std::string footerBlock;
   footer.encodeTo(&footerBlock, metaIndexHandle, indexBlockHandle);
-  writeRawBlock(footerBlock, NoCompression);
-  // writeBlock(footerBlock);
+  writeBlock(footerBlock);
 }
 
 }
