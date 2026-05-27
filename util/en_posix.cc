@@ -277,6 +277,7 @@ class WritablePosixFile final : public WritableFile
   // close file
   void close() override
   {
+    flush();
     if (!_closed)
     {
       if (_permanentFd)

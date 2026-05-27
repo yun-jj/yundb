@@ -108,26 +108,26 @@ void SstableBuilder::build(const MemTable* memtable)
   // Write filter block
   size_t oldBlockPos = _cur_block_position;
   Slice filterBlock = _filter_block_builder.finish();
-  writeBlock(filterBlock);
   std::string filterHandle(_options.filter_policy->Name());
-  filterHandle += _handle_builder.encode(oldBlockPos, filterBlock.size());
+  filterHandle += _handle_builder.encode(oldBlockPos, writeRawBlock(filterBlock, NoCompression));
 
   // Write meta index block
   oldBlockPos = _cur_block_position;
-  writeBlock(filterBlock);
-  std::string metaIndexHandle = _handle_builder.encode(oldBlockPos, filterHandle.size());
+  std::string metaIndexHandle =
+    _handle_builder.encode(oldBlockPos, writeRawBlock(filterHandle, NoCompression));
 
   // Write index block
   oldBlockPos = _cur_block_position;
   std::string indexBlock = _index_block_builder.finish();
-  writeBlock(indexBlock);
-  std::string indexBlockHandle = _handle_builder.encode(oldBlockPos, indexBlock.size());
+  std::string indexBlockHandle =
+    _handle_builder.encode(oldBlockPos, writeRawBlock(indexBlock, NoCompression));
 
   // Write footer
   Footer footer;
   std::string footerBlock;
   footer.encodeTo(&footerBlock, metaIndexHandle, indexBlockHandle);
-  writeBlock(footerBlock);
+  writeRawBlock(footerBlock, NoCompression);
+  _file->flush();
 }
 
 }

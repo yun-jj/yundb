@@ -59,8 +59,8 @@ std::string BlockHandle::encode(uint64_t position, uint64_t size) const
   if (size == ~static_cast<uint64_t>(0))
     printError("BlockHandle::Encode: error size value");
   std::string result;
-  PutVarint64(&result, _position);
-  PutVarint64(&result, _size);
+  PutVarint64(&result, position);
+  PutVarint64(&result, size);
   return result;
 }
 
@@ -69,7 +69,7 @@ const char* BlockHandle::decodeFrom(const char* data)
   if (data == nullptr)
     printError("BlockHandle: None ptr");
 
-  data =  GetVarint64Ptr(data, data + 10, &_position);
+  data = GetVarint64Ptr(data, data + 10, &_position);
   data = GetVarint64Ptr(data, data + 10, &_size);
   _is_decode = true;
 

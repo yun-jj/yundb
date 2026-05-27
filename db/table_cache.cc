@@ -241,7 +241,10 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
     _cache->lookup(Slice(fileNumberKey, FileNumberSize))
   );
 
-  if (randomAccessTable == nullptr) return false;
+  if (randomAccessTable == nullptr) {
+    printError("TableCache: file number %lu not found in cache", fileNumber);
+    return false;
+  }
 
   Slice fileData;
   char scratch[_options.block_size + BlockTrailerSize];

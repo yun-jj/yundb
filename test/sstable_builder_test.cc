@@ -75,9 +75,7 @@ TEST_F(SstableBuilderTest, sstableRead)
   options.env->newWritableFile(fileName, &writeFile);
   yundb::SstableBuilder builder(options, writeFile);
   builder.build(memTable.get());
-
   options.env->newRandomAccessFile(fileName, &randomAccessfile);
-
   yundb::TableCache tableCache(dbName, options,
                                std::make_shared<yundb::Cache>(options.max_cache_size));
   
