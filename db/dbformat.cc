@@ -64,12 +64,22 @@ InternalComparator::InternalComparator(const Options& options)
 
 Slice decodeKey(const Slice& entry)
 {
-  if (entry.data() == nullptr) printError("DecodeKey: entry is null");
+  if (entry.data() == nullptr) printError("decodeKey: entry is null");
 
   const char* keyEntry = entry.data();
   uint64_t keyLen;
   keyEntry = GetVarint64Ptr(keyEntry, keyEntry + 10, &keyLen);
   return Slice(keyEntry, keyLen + KeyTagSize);
+}
+
+Slice decodeUserKey(const Slice& entry)
+{
+  if (entry.data() == nullptr) printError("decodeUserKey: entry is null");
+
+  const char* keyEntry = entry.data();
+  uint64_t keyLen;
+  keyEntry = GetVarint64Ptr(keyEntry, keyEntry + 10, &keyLen);
+  return Slice(keyEntry, keyLen);
 }
 
 Slice decodeValue(const Slice& entry)

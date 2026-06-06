@@ -2,10 +2,11 @@
 #include "db/memtable.h"
 #include "db/dbformat.h"
 #include "test_util.h"
-#include "util/file_name.h"
 #include "yundb/en.h"
 #include "yundb/comparator.h"
+#include "util/file_name.h"
 #include "util/cache.h"
+#include "util/coding.h"
 #include "db/table_cache.h"
 
 
@@ -94,10 +95,12 @@ TEST_F(SstableBuilderTest, sstableRead)
 
   for (const auto& kv : kvMap)
   {
-    std::string value;
-    bool found = tableCache.lookup(666666, fileSize, kv.first, &value);
+    std::string value, key = kv.first;
+    yundb::PutFixed64(&key, yundb::packSeqAndType(seq, yundb::ValueType::TypeValue));
+    bool found = tableCache.lookup(666666, fileSize, key, &value);
     EXPECT_TRUE(found);
     EXPECT_EQ(value, kv.second);
+    seq++;
   }
 
   if (options.env->fileExists(fileName)) {

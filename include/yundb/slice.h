@@ -63,10 +63,19 @@ class Slice
 
   void removePrefix(size_t len)
   {
-     if (len <= size())
+     if (len > size()) {
        printError("Slice: removePrefix len more than size()");
+     }
      _str += len;
      _size -= len;
+  }
+
+  void removeTailfix(size_t len)
+  {
+      if (len > size()) {
+       printError("Slice: removeTailfix len more than size()");
+      }
+      _size -= len;
   }
 
   char operator[](size_t index) const
@@ -89,10 +98,11 @@ inline int Slice::cmp(const Slice& other) const
 
   if (rs == 0)
   {
-      if (_size < other._size)
+      if (_size < other._size) {
         rs = -1;
-     else if (_size > other._size)
+      } else if (_size > other._size) {
         rs = +1;
+      }
   }
   return rs;
 }

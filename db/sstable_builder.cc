@@ -97,7 +97,7 @@ void SstableBuilder::build(const MemTable* memtable)
     }
     // Put key value pair
     _data_block_builder.put(iter.getKey(), iter.getValue());
-    _filter_block_builder.addKey(iter.getKey());
+    _filter_block_builder.addKey(iter.getUserKey());
     iter++;
   }
   

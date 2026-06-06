@@ -11,28 +11,25 @@ DataBlockReader::DataBlockReader(const Options& options)
     : _options(options) {}
 
  DataBlockReader::Iter::Iter() 
-      : _block_start(nullptr),
-        _restart_ptr(nullptr),
-        _restart_ptr_head(nullptr),
-        _restart_ptr_tail(nullptr),
-        _start(nullptr),
-        _end(nullptr),
-        _shared_Key_Len(0){}
+      : _blockStart(nullptr),
+        _restartEntry(nullptr),
+        _headRestartEntry(nullptr),
+        _tailRestartEntry(nullptr),
+        _sharedKeyLen(0){}
 
-DataBlockReader::Iter::Iter(const char* blockStart, const char* restartPtr,
-                            const char* restartPtrHead, const char* restartPtrTail)
-      : _block_start(blockStart),
-        _restart_ptr(restartPtr),
-        _restart_ptr_head(restartPtrHead),
-        _restart_ptr_tail(restartPtrTail),
-        _shared_Key_Len(0)
+DataBlockReader::Iter::Iter(const char* blockStart, const char* restartEntry,
+                            const char* headEntry, const char* tailEntry)
+      : _blockStart(blockStart),
+        _restartEntry(restartEntry),
+        _headRestartEntry(headEntry),
+        _tailRestartEntry(tailEntry),
+        _sharedKeyLen(0)
 {
-  if (_restart_ptr >= _restart_ptr_head && _restart_ptr <= _restart_ptr_tail)
-  {
-    uint32_t offset = DecodeFixed32(_restart_ptr);
+  if (_restartEntry >= _headRestartEntry && _restartEntry <= _tailRestartEntry) {
+    uint32_t offset = DecodeFixed32(_restartEntry);
     decodeEntry(blockStart + offset);
   }
-  _head_Key = _key_Delta;
+  _headKey = _keyDelta;
 }
 
 std::string DataBlockReader::Iter::getValue()
@@ -40,19 +37,19 @@ std::string DataBlockReader::Iter::getValue()
 
 std::string DataBlockReader::Iter::getKey()
 {
-  if (_shared_Key_Len == 0) return _key_Delta;
+  if (_sharedKeyLen == 0) return _keyDelta;
   std::string key;
-  key.reserve(_shared_Key_Len + _key_Delta.size());
-  key.append(_head_Key, 0, _shared_Key_Len);
-  key.append(_key_Delta);
+  key.reserve(_sharedKeyLen + _keyDelta.size());
+  key.append(_headKey, 0, _sharedKeyLen);
+  key.append(_keyDelta);
   return key;
 }
 
 bool DataBlockReader::Iter::operator<(const Iter& other)
-{return _restart_ptr < other._restart_ptr;}
+{return _restartEntry < other._restartEntry;}
 
 bool DataBlockReader::Iter::operator>(const Iter& other)
-{return _restart_ptr > other._restart_ptr;}
+{return _restartEntry > other._restartEntry;}
 
 
 bool DataBlockReader::Iter::operator<=(const Iter& other)
@@ -63,24 +60,27 @@ bool DataBlockReader::Iter::operator>=(const Iter& other)
 
 DataBlockReader::Iter DataBlockReader::Iter::operator+(ptrdiff_t number)
 {
-  const char* newRestartPtr = _restart_ptr + number * 4;
-  if (newRestartPtr > _restart_ptr_tail || newRestartPtr < _restart_ptr_head)
-    printError("DataBlockReader: error restart ptr");
-  return Iter(_block_start, newRestartPtr, _restart_ptr_head, _restart_ptr_tail);
+  const char* newRestartPtr = _restartEntry + number * 4;
+  if (newRestartPtr > _tailRestartEntry || newRestartPtr < _headRestartEntry) {
+    return Iter();
+  }
+  return Iter(_blockStart, newRestartPtr, _headRestartEntry, _tailRestartEntry);
 }
 
 DataBlockReader::Iter DataBlockReader::Iter::operator-(ptrdiff_t number)
 {return this->operator+(-number);}
 
+inline bool DataBlockReader::Iter::empty() const
+{return _restartEntry == nullptr;}
+
 bool DataBlockReader::Iter::next()
 {
   Iter tmp = *this;
-  if (_end == _restart_ptr_head) 
-    printError("DataBlockReader: end ptr overflow");
-  decodeEntry(_end);
+  if (_nextDataEntry == _headRestartEntry) {
+    return false;
+  }
 
-  if (_shared_Key_Len == 0)
-  {
+  if (!decodeEntry(_nextDataEntry)) {
     *this = tmp;
     return false;
   }
@@ -97,25 +97,22 @@ bool DataBlockReader::Iter::seek(const Slice& key, const Comparator* comparator,
   SequenceNumber keySeq;
   decodeSeqAndType(keyPtr + key.size() - KeyTagSize, &keySeq, nullptr);
 
-  for (int i = 0; restartInterval > i; i++) 
+  for (int i = 0; restartInterval > i; i++)
   {
     const std::string cur = getKey();
     const char* curPtr = cur.data();
     const Slice curUserKey(curPtr, cur.size() - KeyTagSize);
 
-    if (comparator->cmp(userKey, curUserKey) == 0)
-    {
+    if (comparator->cmp(userKey, curUserKey) == 0) {
       SequenceNumber curKeySeq;
       decodeSeqAndType(curPtr + cur.size() - KeyTagSize, &curKeySeq, nullptr);
-      
       if (keySeq > curKeySeq) curResult = getValue();
     }
     
-    if (!next()) return false;
+    if (!next()) break;
   }
 
-  if (!curResult.empty())
-  {
+  if (!curResult.empty()) {
     result->append(std::move(curResult));
     return true;
   }
@@ -126,83 +123,76 @@ bool DataBlockReader::Iter::seek(const Slice& key, const Comparator* comparator,
 DataBlockReader::Iter mid(const DataBlockReader::Iter& left,
                           const DataBlockReader::Iter& right)
 {
-  if (left._restart_ptr <= right._restart_ptr)
+  if (left._restartEntry > right._restartEntry) {
     printError("DataBlockReader: error left and right Iter");
-  size_t n = (right._restart_ptr - left._restart_ptr) / 4;
-  const char* newRestartPtr = left._restart_ptr + (n / 2) * 4;
-  if (newRestartPtr > left._restart_ptr_tail ||
-      newRestartPtr < left._restart_ptr_head) {
+    return DataBlockReader::Iter();
+  }
+
+  size_t n = (right._restartEntry - left._restartEntry) / 4;
+  const char* newRestartPtr = left._restartEntry + (n / 2) * 4;
+  if (newRestartPtr > right._tailRestartEntry ||
+      newRestartPtr < left._headRestartEntry) {
     printError("DataBlockReader: error restart ptr");
+    return DataBlockReader::Iter();
   }
 
   return DataBlockReader::Iter(
-    left._block_start,
+    left._blockStart,
     newRestartPtr,
-    left._restart_ptr_head,
-    left._restart_ptr_tail
+    left._headRestartEntry,
+    left._tailRestartEntry
   );
 }
 
-void DataBlockReader::Iter::decodeEntry(const char* start)
+bool DataBlockReader::Iter::decodeEntry(const char* start)
 {
   if (start == nullptr) {
     printError("DataBlockReader: None start ptr");
+    return false;
   }
 
   uint64_t unsharedKeyLen = 0, valueLen = 0;
-  start = GetVarint64Ptr(start, start + 10, &_shared_Key_Len);
+  start = GetVarint64Ptr(start, start + 10, &_sharedKeyLen);
   start = GetVarint64Ptr(start, start + 10, &unsharedKeyLen);
 
-  if (unsharedKeyLen == 0) {
-    printError("DataBlockReader: unSharedKeyLen is zero");
-  }
+  if (unsharedKeyLen == 0) return false;
 
   start = GetVarint64Ptr(start, start + 10, &valueLen);
 
-  if (valueLen == 0) {
-    printError("DataBlockReader: valueLen is zero");
-  }
-
-  _key_Delta.append(start, unsharedKeyLen);
-
-  if (_key_Delta.empty()) {
-    printError("DataBlockReader: keyDelta append zero");
-  }
-
-  _value.append(start + unsharedKeyLen, valueLen);
-
-  if (_value.empty()) {
-    printError("DataBlockReader: valueLen append zero");
-  }
-
-  _end = start + unsharedKeyLen + valueLen;
+  _keyDelta.assign(start, unsharedKeyLen);
+  _value.assign(start + unsharedKeyLen, valueLen);
+  _nextDataEntry = start + unsharedKeyLen + valueLen;
+  return true;
 }
 
 // Key format is | key | seq, type | 
 bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::string* result)
 {
-  if (block.empty() || key.empty() || result == nullptr)
+  if (block.empty() || key.empty() || result == nullptr) {
     printError("DatablockReader: None block, key or result");
+  }
 
   const char* data = block.data();
   size_t blockSize = block.size();
   uint32_t restartPtrLen = DecodeFixed32(data + blockSize - 4);
-  const char* restartPtrHead = data + blockSize - 4 * (restartPtrLen + 1);
-  const char* restartPtrTail = data + blockSize - 8;
+  const char* headEntry = data + blockSize - 4 * (restartPtrLen + 1);
+  const char* tailEntry = data + blockSize - 8;
 
-  Iter left(data, restartPtrHead, restartPtrHead, restartPtrTail);
-  Iter right(data, restartPtrTail, restartPtrHead, restartPtrTail);
+  Iter left(data, headEntry, headEntry, tailEntry);
+  Iter right(data, tailEntry, headEntry, tailEntry);
 
   const Comparator* comparator = _options.comparator;
   Iter midIter;
 
-  auto cmp = [&](const Slice& key1, const Slice& key2){
+  auto cmp = [&](const Slice& key1, const Slice& key2) {
     const char* key1Ptr = key1.data();
     const char* key2Ptr = key2.data();
 
     // Cmp user key
-    Slice userKey1(key1Ptr, key1.size() - KeyTagSize); 
-    Slice userKey2(key2Ptr, key2.size() - KeyTagSize);
+    Slice userKey1 = key1;
+    userKey1.removeTailfix(KeyTagSize);
+    Slice userKey2 = key2;
+    userKey2.removeTailfix(KeyTagSize);
     int rs = comparator->cmp(userKey1, userKey2);
 
     // Cmp seq
@@ -212,8 +202,11 @@ bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::stri
       decodeSeqAndType(key1Ptr + key1.size() - KeyTagSize, &key1Seq, nullptr);
       decodeSeqAndType(key2Ptr + key2.size() - KeyTagSize, &key2Seq, nullptr);
 
-      if (key1Seq > key2Seq) rs = +1;
-      else if (key1Seq < key2Seq) rs = -1;
+      if (key1Seq > key2Seq) {
+        rs = +1;
+      } else if (key1Seq < key2Seq) {
+        rs = -1;
+      }
     }
 
     return rs;
@@ -224,18 +217,35 @@ bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::stri
   while (left <= right)
   {
     midIter = mid(left, right);
+    if (midIter.empty()) {
+      printError("DataBlockReader: error mid Iter");
+      return false;
+    }
     int rs = cmp(midIter.getKey(), key);
 
-    if (rs < 0)
-    {
+    if (rs > 0) {
       seekIter = midIter;
-      left =  midIter + 1;
+      right = midIter - 1;
+    } else {
+      left = midIter + 1;
     }
-    else right = midIter - 1;
+
+    if (left.empty() || right.empty()) {
+      break;
+    }
   }
 
-  return seekIter.seek(key, comparator,
-                       _options.block_restart_interval, result);
+  if (seekIter.empty()) {
+    return false;
+  } else if (seekIter.seek(key, comparator, _options.block_restart_interval, result)) {
+    return true;
+  } else {
+    seekIter = seekIter - 1;
+    if (seekIter.empty()) {
+      return false;
+    }
+    return seekIter.seek(key, comparator, _options.block_restart_interval, result);
+  }
 }
 
 }

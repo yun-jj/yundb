@@ -104,9 +104,7 @@ void IndexBlockIterator::seek(const Slice& target)
   const char* entry = _start;
   while (entry < _limit)
   {
-    const char* key = nullptr;
-    const char* value = nullptr;
-    const char* next = nullptr;
+    const char* key = nullptr, *value = nullptr, *next = nullptr;
     uint64_t keyLen = 0;
     uint64_t valueLen = 0;
 
@@ -258,10 +256,10 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
   std::string uncompressedData = uncompressBlock(fileData, checkBlock(fileData));
   Footer footer(uncompressedData);
 
-  std::string fileterBlock;
+  std::string filterBlock;
   std::string indexBlock;
 
-  if (!getFilterBlock(footer, randomAccessTable, &fileterBlock)) {
+  if (!getFilterBlock(footer, randomAccessTable, &filterBlock)) {
     printError("TableCache: get filter block error");
     return false;
   }
@@ -273,7 +271,7 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
 
   FilterBlockReader filterBlockReader(
     _options.filter_policy,
-    Slice(fileterBlock.data(), fileterBlock.size())
+    Slice(filterBlock.data(), filterBlock.size())
   );
   IndexBlockIterator indexBlockIter(
     indexBlock.data(),
@@ -281,8 +279,10 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
   );
 
   indexBlockIter.seek(key);
+  Slice userKey = key;
+  userKey.removeTailfix(KeyTagSize);
 
-  if (indexBlockIter.valid() && filterBlockReader.keyMayMatch(indexBlockIter.index(), key))
+  if (indexBlockIter.valid() && filterBlockReader.keyMayMatch(indexBlockIter.index(), userKey))
   {
     DataBlockReader dataBlockReader(_options);
     Slice dataBlockHandle = indexBlockIter.value();

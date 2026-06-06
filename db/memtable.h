@@ -47,9 +47,34 @@ class Iter
   bool empty()
   {return (_cur == nullptr);}
 
-  Slice getKey();
+  // Format is | key | seq, type |
+  Slice getKey()
+  {
+    if (_cur != nullptr) {
+      Slice entry = _cur->getKey();
+      return decodeKey(entry);
+    }
+    return Slice("");
+  }
 
-  Slice getValue();
+  Slice getUserKey()
+  {
+    if (_cur != nullptr) {
+      Slice entry = _cur->getKey();
+      return decodeUserKey(entry);
+    }
+    return Slice("");
+  }
+
+  // Format is | value |
+  Slice getValue()
+  {
+    if (_cur != nullptr) {
+      Slice entry = _cur->getKey();
+      return decodeValue(entry);
+    }
+    return Slice("");
+  }
 
  private:
   const typename SkipList<Slice, InternalComparator>::Node* _cur;

@@ -67,6 +67,9 @@ std::string uncompressBlock(const Slice& block, CompressionType type);
 // Decode format | key | seq, type |
 Slice decodeKey(const Slice& entry);
 
+// Decode format | key |
+Slice decodeUserKey(const Slice& entry);
+
 // Decode format | value |
 Slice decodeValue(const Slice& entry);
 

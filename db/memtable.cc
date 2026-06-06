@@ -2,31 +2,6 @@
 
 namespace yundb
 {
-
-// Format is | key | seq, type |
-Slice MemTable::Iter::getKey()
-{
-  if (_cur != nullptr)
-  {
-    Slice entry = _cur->getKey();
-    return decodeKey(entry);
-  }
-
-  return Slice("");
-}
-
-// Format is | value |
-Slice MemTable::Iter::getValue()
-{
-  if (_cur != nullptr)
-  {
-    Slice entry = _cur->getKey();
-    return decodeValue(entry);
-  }
-
-  return Slice("");
-}
-
 // The Node data format is | VarintKeySize | key | seq, type | VarintValueSize | Value |
 // but Node just refer | VarintKeySize |key| seq, type |
 

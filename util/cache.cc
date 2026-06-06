@@ -27,18 +27,7 @@ Cache::Cache(size_t capacity)
   _inUse.next = &_inUse;
 }
 
-Cache::~Cache()
-{
-  _mutex.Lock();
-  LRUHandle* handle = _lru.next;
-  while (handle != &_lru)
-  {
-    LRUHandle* next = handle->next;
-    freeLRUHandle(handle);
-    handle = next;
-  }
-  _mutex.unlock();
-}
+Cache::~Cache() {}
 
 void* Cache::lookup(const Slice& key)
 {
@@ -67,7 +56,7 @@ void Cache::insert(const Slice& key, void* value, size_t charge,
   _mutex.Lock();
   LRUInsert(&handle);
 
-   while (_usage > _capacity && _lru.next != &_lru)
+  while (_usage > _capacity && _lru.next != &_lru)
   {
     LRUHandle* old = _lru.next;
     LRURemove(&old);
@@ -143,8 +132,7 @@ void Cache::inUseRemove(LRUHandle** handle)
 void Cache::ref(LRUHandle** handle)
 {
   ++(*handle)->refs;
-  if (!(*handle)->inUse && (*handle)->refs >= 2 && (*handle)->inCache)
-  {
+  if (!(*handle)->inUse && (*handle)->refs >= 2 && (*handle)->inCache) {
     (*handle)->inUse = true;
     inUseInsert(handle);
   }
@@ -153,8 +141,7 @@ void Cache::ref(LRUHandle** handle)
 void Cache::unRef(LRUHandle** handle)
 {
   --(*handle)->refs;
-  if ((*handle)->refs == 1 && (*handle)->inCache && (*handle)->inUse)
-  {
+  if ((*handle)->refs == 1 && (*handle)->inCache && (*handle)->inUse) {
     (*handle)->inUse = false;
     inUseRemove(handle);
     LRUInsert(handle);
@@ -181,8 +168,9 @@ LRUHandle** LRUTable::findPointer(const Slice& key, size_t hash)
   LRUHandle** ptr = &_buckets[hash & (_buckets.size() - 1)];
   while (*ptr != nullptr)
   {
-      if ((*ptr)->hashValue == hash && (*ptr)->getKey() == key)
+      if ((*ptr)->hashValue == hash && (*ptr)->getKey() == key) {
         return ptr;
+      }
       ptr = &((*ptr)->nextHash);
   }
   return ptr;
@@ -191,8 +179,9 @@ LRUHandle** LRUTable::findPointer(const Slice& key, size_t hash)
 LRUHandle** LRUTable::lookup(const Slice& key, const size_t hash)
 {
   LRUHandle** ptr = findPointer(key, hash);
-  if (*ptr != nullptr)
+  if (*ptr != nullptr) {
     return ptr;
+  }
   return nullptr;
 }
 
@@ -212,14 +201,11 @@ LRUHandle* LRUTable::remove(size_t hashValue, const Slice& key)
 void LRUTable::insert(LRUHandle* handle)
 {
   LRUHandle** ptr = findPointer(handle->getKey(), handle->getHashValue());
-  if (*ptr != nullptr)
-  {
+  if (*ptr != nullptr) {
     handle->nextHash = (*ptr)->nextHash;
     *ptr = handle;
     ++elems;
-  }
-  else
-  {
+  } else {
     handle->nextHash = *ptr;
     *ptr = handle;
     ++elems;
@@ -230,22 +216,22 @@ void LRUTable::insert(LRUHandle* handle)
 
 
 void LRUTable::resize()
+{
+  std::vector<LRUHandle*> newBuckets(_buckets.size() * 2, nullptr);
+  for (size_t i = 0; i < _buckets.size(); ++i)
   {
-    std::vector<LRUHandle*> newBuckets(_buckets.size() * 2, nullptr);
-    for (size_t i = 0; i < _buckets.size(); ++i)
+    LRUHandle* handle = _buckets[i];
+    while (handle != nullptr)
     {
-      LRUHandle* handle = _buckets[i];
-      while (handle != nullptr)
-      {
-        LRUHandle* next = handle->nextHash;
-        size_t idx = handle->getHashValue() & (newBuckets.size() - 1);
-        handle->nextHash = newBuckets[idx];
-        newBuckets[idx] = handle;
-        handle = next;
-      }
+      LRUHandle* next = handle->nextHash;
+      size_t idx = handle->getHashValue() & (newBuckets.size() - 1);
+      handle->nextHash = newBuckets[idx];
+      newBuckets[idx] = handle;
+      handle = next;
     }
-    _buckets.swap(newBuckets);
   }
+  _buckets.swap(newBuckets);
+}
 
 static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value, size_t charge,
                                void (*deleter)(const Slice& key, void* value))
@@ -267,8 +253,9 @@ static LRUHandle* newLRUHandle(const Slice& key, size_t hash, void* value, size_
 
 static void freeLRUHandle(LRUHandle* handle)
 {
-  if (handle->deleter != nullptr)
+  if (handle->deleter != nullptr) {
     handle->deleter(handle->getKey(), handle->value);
+  }
   delete[] reinterpret_cast<char*>(handle);
 }
 
