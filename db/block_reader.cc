@@ -91,6 +91,7 @@ bool DataBlockReader::Iter::next()
 bool DataBlockReader::Iter::seek(const Slice& key, const Comparator* comparator,
                                  int restartInterval, std::string* result)
 {
+  bool found = false;
   std::string curResult;
   const char* keyPtr = key.data();
   const Slice userKey(keyPtr, key.size() - KeyTagSize);
@@ -105,8 +106,12 @@ bool DataBlockReader::Iter::seek(const Slice& key, const Comparator* comparator,
 
     if (comparator->cmp(userKey, curUserKey) == 0) {
       SequenceNumber curKeySeq;
-      decodeSeqAndType(curPtr + cur.size() - KeyTagSize, &curKeySeq, nullptr);
-      if (keySeq > curKeySeq) curResult = getValue();
+      ValueType type;
+      decodeSeqAndType(curPtr + cur.size() - KeyTagSize, &curKeySeq, &type);
+      if (keySeq > curKeySeq) {
+        found = true;
+        curResult = getValue();
+      }
     }
     
     if (!next()) break;
@@ -114,10 +119,9 @@ bool DataBlockReader::Iter::seek(const Slice& key, const Comparator* comparator,
 
   if (!curResult.empty()) {
     result->append(std::move(curResult));
-    return true;
   }
   
-  return false;
+  return found;
 }
 
 DataBlockReader::Iter mid(const DataBlockReader::Iter& left,
@@ -212,7 +216,7 @@ bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::stri
     return rs;
   };
 
-  Iter seekIter;
+  Iter seekIter = mid(left, right);
 
   while (left <= right)
   {
@@ -224,9 +228,9 @@ bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::stri
     int rs = cmp(midIter.getKey(), key);
 
     if (rs > 0) {
-      seekIter = midIter;
       right = midIter - 1;
     } else {
+      seekIter = midIter;
       left = midIter + 1;
     }
 
@@ -235,17 +239,7 @@ bool DataBlockReader::queryValue(const Slice& block, const Slice& key, std::stri
     }
   }
 
-  if (seekIter.empty()) {
-    return false;
-  } else if (seekIter.seek(key, comparator, _options.block_restart_interval, result)) {
-    return true;
-  } else {
-    seekIter = seekIter - 1;
-    if (seekIter.empty()) {
-      return false;
-    }
-    return seekIter.seek(key, comparator, _options.block_restart_interval, result);
-  }
+  return seekIter.seek(key, comparator, _options.block_restart_interval, result);
 }
 
 }

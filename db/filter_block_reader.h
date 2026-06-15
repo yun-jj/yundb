@@ -23,12 +23,15 @@ class FilterBlockReader
   bool keyMayMatch(uint32_t filterIndex, const Slice& key) const;
 
  private:
-  uint32_t getFilterOffset(uint32_t index) const;
+  uint32_t getFilterOffset(uint32_t filterIndex) const;
+
+  uint32_t getFilterSize(uint32_t filterIndex) const;
 
   const FilterPolicy* _policy;
   const Slice _contents;
   const char* _filterData;
   const char* _filterOffsets;
+  const char* _filterSizes;
   uint32_t _filterDataSize;
   uint32_t _filterNum;
 };

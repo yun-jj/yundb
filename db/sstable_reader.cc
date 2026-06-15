@@ -14,4 +14,6 @@ SstableReader::SstableReader(const Options& options, std::string fileName)
  
 }
 
+SstableReader::~SstableReader() {}
+
 }

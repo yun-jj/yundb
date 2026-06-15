@@ -16,7 +16,7 @@ namespace yundb
     _data.reserve(options.block_size);
   }
   // Find string first mismatch pos
-  static size_t find_first_mismatch(const char* s1, const char* s2)
+  static size_t findFirstMismatch(const char* s1, const char* s2)
   {
     if (!s1 || !s2) return 0;
     
@@ -31,17 +31,17 @@ namespace yundb
 
   void DataBlockBuilder::put(const Slice& key, const Slice& value)
   {
-    if (key.empty() || value.empty())
+    if (key.empty() || value.empty()) {
       printError("DataBlockBuilder: empty key or value");
+    }
 
     size_t pos = 0;
-    if (_count != 0)
-      pos = find_first_mismatch(key.data(), _head_Key.data());
-    else
-    {
-      _head_Key.clear();
-      _head_Key.append(key.data(), key.size());
-      _restart_Ptrs.push_back(_data.size());
+    if (_count != 0) {
+      pos = findFirstMismatch(key.data(), _headKey.data());
+    } else {
+      _headKey.clear();
+      _headKey.append(key.data(), key.size());
+      _restartPtrs.push_back(_data.size());
     }
     // Put shared key len
     PutVarint64(&_data, pos);
@@ -55,20 +55,24 @@ namespace yundb
     _data.append(value.data(), value.size());
     ++_count;
     // Get restart interval
-    if (_count == _options.block_restart_interval)
+    if (_count == _options.block_restart_interval) {
       _count = 0;
-    // Update Last Key
-    _last_Key.assign(key.data(), key.size());
+    }
+    // Update min Key
+    if (_minKey.empty()) {
+      _minKey.assign(key.data(), key.size());
+    }
   }
 
   std::string DataBlockBuilder::finish()
   {
-    for (size_t i = 0; _restart_Ptrs.size() > i; i++)
-      PutFixed32(&_data, _restart_Ptrs[i]);
-    PutFixed32(&_data, static_cast<uint32_t>(_restart_Ptrs.size()));
+    for (size_t i = 0; _restartPtrs.size() > i; i++) {
+      PutFixed32(&_data, _restartPtrs[i]);
+    }
+    PutFixed32(&_data, static_cast<uint32_t>(_restartPtrs.size()));
     // Clear and prepare new data block
     _count = 0;
-    _restart_Ptrs.clear();
+    _restartPtrs.clear();
     std::string block; 
     block.swap(_data);
     _data.reserve(_options.block_size);
@@ -81,7 +85,7 @@ namespace yundb
     size_t newBlcokSize = _data.size();
     // 30 is max 3 time variant size
     newBlcokSize += 30 + key.size() + value.size();
-    newBlcokSize += (_restart_Ptrs.size() + 1) * 4;
+    newBlcokSize += (_restartPtrs.size() + 1) * 4;
     return newBlcokSize;
   }
 }

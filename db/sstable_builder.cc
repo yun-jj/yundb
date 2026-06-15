@@ -76,10 +76,9 @@ void SstableBuilder::flushBlock()
   // Put restart_ptrs
   std::string block = _data_block_builder.finish();
   auto oldBlockPos = _cur_block_position;
-  auto writeSize = writeBlock(block);
-  // Put index entry = | data block max key | position && data block size | 
-  _index_block_builder.put(_data_block_builder.getLastKey(),
-                           _handle_builder.encode(oldBlockPos, writeSize)); 
+  // Put index entry = | data block min key | position && data block size |
+  _index_block_builder.put(_data_block_builder.getMinKeyAndClear(),
+                           _handle_builder.encode(oldBlockPos, writeBlock(block)));
   // Generate filter
   _filter_block_builder.generateFilter();
 }

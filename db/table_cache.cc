@@ -33,11 +33,12 @@ class IndexBlockIterator
 {
  public:
   // Start and end of whole index block
-  IndexBlockIterator(const char* start, const char* end)
+  IndexBlockIterator(const char* start, const char* end, Options options)
       : _start(start),
         _end(end),
         _cur(start),
         _limit(entryLimit(start, end)),
+        _options(options),
         _index(0),
         _valid(start != nullptr && end != nullptr && start < end && _limit != nullptr)
   { seekToFirst(); }
@@ -52,6 +53,8 @@ class IndexBlockIterator
 
   void seekToFirst();
 
+  int cmp(const char* key1, size_t key1Len, const char* key2, size_t key2Len);
+
   void seek(const Slice& target);
 
   // Get data block handle
@@ -63,11 +66,11 @@ class IndexBlockIterator
 
   const char* blockEnd() const { return _end; }
  private:
-
   const char* _start;
   const char* _end;
   const char* _cur;
   const char* _limit;
+  Options _options;
   int _index;
   bool _valid;
 };
@@ -96,17 +99,37 @@ void IndexBlockIterator::seekToFirst()
   _valid = true;
 }
 
+int IndexBlockIterator::cmp(const char* key1, size_t key1Len, const char* key2, size_t key2Len)
+{
+  int rs = _options.comparator->cmp(
+    Slice(key1, key1Len - KeyTagSize),
+    Slice(key2, key2Len - KeyTagSize)
+  );
+
+  if (rs == 0) {
+    SequenceNumber seq1, seq2;
+    decodeSeqAndType(key1 + key1Len - KeyTagSize, &seq1, NULL);
+    decodeSeqAndType(key2 + key2Len - KeyTagSize, &seq2, NULL);
+    if (seq1 > seq2) {
+      return 1;
+    } else {
+      return -1;
+    }
+  } else {
+    return rs;
+  }
+}
+
 void IndexBlockIterator::seek(const Slice& target)
 {
   if (!_valid) return;
 
-  _index = 0;
-  const char* entry = _start;
+  _index = -1;
+  const char* entry = _start, *pre = nullptr;
   while (entry < _limit)
   {
     const char* key = nullptr, *value = nullptr, *next = nullptr;
-    uint64_t keyLen = 0;
-    uint64_t valueLen = 0;
+    uint64_t keyLen = 0, valueLen = 0;
 
     if (!decodeIndexEntry(entry, _limit, &key, &keyLen, &value, &valueLen, &next)) {
       _index = -1;
@@ -115,19 +138,25 @@ void IndexBlockIterator::seek(const Slice& target)
       return;
     }
 
-    if (Slice(key, static_cast<size_t>(keyLen)).cmp(target) >= 0) {
-      _cur = entry;
-      _valid = true;
+    if (this->cmp(key, keyLen, target.data(), target.size()) > 0) {
+      _cur = pre != nullptr? pre : _start;
+      _valid = pre != nullptr;
       return;
     }
 
+    pre = entry;
     entry = next;
     _index++;
   }
 
-  _index = -1;
-  _cur = _start;
-  _valid = false;
+  if (pre != nullptr) {
+    _cur = pre;
+    _valid = true;
+  } else {
+    _index = -1;
+    _cur = _start;
+    _valid = false;
+  }
 }
 
 Slice IndexBlockIterator::value() const
@@ -148,7 +177,6 @@ Slice IndexBlockIterator::value() const
 
   return Slice(value, static_cast<size_t>(valueLen));
 }
-
 
 bool TableCache::getFilterBlock(const Footer& footer, RandomAccessFile* file, std::string* result)
 {
@@ -275,7 +303,8 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
   );
   IndexBlockIterator indexBlockIter(
     indexBlock.data(),
-    indexBlock.data() + indexBlock.size()
+    indexBlock.data() + indexBlock.size(),
+    _options
   );
 
   indexBlockIter.seek(key);
@@ -296,10 +325,7 @@ bool TableCache::lookup(uint64_t fileNumber, size_t fileSize, const Slice key, s
       return false;
     }
     uncompressedData = uncompressBlock(dataBlock, checkBlock(dataBlock));
-
-    if (dataBlockReader.queryValue(uncompressedData, key, value)) {
-      return true;
-    }
+    return dataBlockReader.queryValue(uncompressedData, key, value);
   }
 
   return false;

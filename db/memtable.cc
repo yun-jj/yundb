@@ -34,8 +34,7 @@ void MemTable::add(SequenceNumber seq, ValueType type,
 
 bool MemTable::get(LookUpKey& key, std::string* value, bool& found)
 {
-  if (!found) 
-  {
+  if (!found) {
     printError("found not true");
     return false;
   }

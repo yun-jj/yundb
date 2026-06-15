@@ -10,8 +10,8 @@
 namespace yundb
 {
 /*
-FilterBlockBuilder format
-|filter data|filter data|....|filter data|filter data offsets|filter data size|filter data number|
+Block format:
+|filter data|filter data|....|filter data|filter data offsets|filter data sizes|filter data number|
 Filter data offsets refer all filter data.
 Filter data size refer end of all filter data.
 */
@@ -37,6 +37,7 @@ class FilterBlockBuilder
   // For filter->createFilter() argument
   std::vector<Slice> _tmpKeys;
   std::vector<uint32_t> _filterOffsets;
+  std::vector<uint32_t> _filterDataSizes;
 };
 
 }

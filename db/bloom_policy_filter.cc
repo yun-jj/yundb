@@ -17,7 +17,7 @@ class BloomPolicyFilter : public FilterPolicy
   virtual const char* Name() const override
   {return "bloom Filter";}
   // Create filter and append dst
-  virtual void createFilter(const Slice* keys,
+  virtual int createFilter(const Slice* keys,
                             int n, std::string* dst) const override;
   // Return true if the key was 
   // in the list of keys passed to createFilter().
@@ -29,11 +29,12 @@ class BloomPolicyFilter : public FilterPolicy
 BloomPolicyFilter::BloomPolicyFilter(uint32_t bitsPerKey)
       : _bitsPerKey(bitsPerKey) {}  
 
-void BloomPolicyFilter::createFilter(const Slice* keys,
-                                     int n, std::string* dst) const 
+int BloomPolicyFilter::createFilter(const Slice* keys,
+                                    int n, std::string* dst) const 
 {
-  if (keys == nullptr) printError("BloomPolicyFilter: None keys");
-  if (dst == nullptr) printError("BloomPolicyFilter: None dst");
+  if (keys == nullptr || dst == nullptr) {
+    printError("BloomPolicyFilter: None keys or dst");
+  }
   if (n <= 0) printError("BloomPolicyFilter: error n value");
 
   uint32_t m = static_cast<uint32_t>(_bitsPerKey * n);
@@ -57,33 +58,38 @@ void BloomPolicyFilter::createFilter(const Slice* keys,
   for (int i = 0; n > i; i++)
   {
     uint32_t h = bloomHash(keys[i]);
-    const uint32_t delte = (h >> 17) | (h << 15);
+    const uint32_t delta = (h >> 17) | (h << 15);
 
     for (int j = 0; k > j; j++)
     {
       const uint32_t bitPos = (h % m);
       array[(bitPos / 8)] |= (1 << (bitPos % 8));
-      h += delte;
+      h += delta;
     }
   }
-}                                            
+
+  return dst->size() - initSize;
+}
 
 bool BloomPolicyFilter::keyMayMatch(const Slice& key, const Slice& filter) const
 {
+  if (key.empty() || filter.empty()) return false;
+
   const char* array = filter.data();
   const uint32_t arrayBytes = filter.size() - 1;
   const uint32_t m = arrayBytes * 8;
   uint32_t k = static_cast<uint32_t>(array[arrayBytes]);
 
   uint32_t h = bloomHash(key);
-  const uint32_t delte = (h >> 17) | (h << 15);
+  const uint32_t delta = (h >> 17) | (h << 15);
 
   for (int i = 0; k > i; i++)
   {
     const uint32_t bitPos = (h % m);
-    if (!(array[(bitPos / 8)] & (1 << (bitPos % 8))))
+    if (!(array[(bitPos / 8)] & (1 << (bitPos % 8)))) {
       return false;
-    h += delte;
+    }
+    h += delta;
   }
 
   return true;

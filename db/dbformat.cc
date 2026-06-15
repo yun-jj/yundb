@@ -92,7 +92,6 @@ Slice decodeValue(const Slice& entry)
   return Slice(valueEntry + VarintLength(valueLen), valueLen);
 }
 
-
 const char* InternalComparator::name() const
 {
   return "InternalComparator";

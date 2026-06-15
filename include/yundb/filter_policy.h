@@ -16,7 +16,8 @@ class FilterPolicy
   // Return policy name
   virtual const char* Name() const = 0;
   // Create filter and append dst
-  virtual void createFilter(const Slice* keys,
+  // return write bytes of filter data
+  virtual int createFilter(const Slice* keys,
                             int n, std::string* dst) const = 0;
   // Return true if the key was 
   // in the list of keys passed to createFilter().

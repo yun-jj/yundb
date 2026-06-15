@@ -38,7 +38,7 @@ SstableBuilderTest::SstableBuilderTest()
 
 TEST_F(SstableBuilderTest, sstableGenerate)
 {
-  yundb::SequenceNumber seq;
+  yundb::SequenceNumber seq = 0;
 
   while (memTable->getMemoryUsage() <= options.write_buffer_size)
   {
@@ -60,7 +60,7 @@ TEST_F(SstableBuilderTest, sstableGenerate)
 
 TEST_F(SstableBuilderTest, sstableRead)
 {
-  yundb::SequenceNumber seq;
+  yundb::SequenceNumber seq = 0;
   yundb::WritableFile* writeFile;
   yundb::RandomAccessFile* randomAccessfile = nullptr;
 

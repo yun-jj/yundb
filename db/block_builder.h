@@ -10,7 +10,6 @@
 namespace yundb
 {
 
-
 class DataBlockBuilder
 {
  public:
@@ -34,21 +33,25 @@ class DataBlockBuilder
   uint64_t getSize() const
   {return _data.size();}
   // Return current max head Key
-  Slice getLastKey() const
+  std::string getMinKeyAndClear()
   {
-    if (_last_Key.empty())
-      printError("DataBlockBuilder: None LastKey");
-    return _last_Key;
+    if (_minKey.empty()) {
+      printError("DataBlockBuilder: None min key");
+    }
+    std::string rs;
+    rs.swap(_minKey);
+    _minKey.clear();
+    return rs;
   }
   void changeOptions(const Options& options)
   {_options = options;}
   private:
   Options _options;
   int _count;
-  std::string _head_Key;
-  std::string _last_Key;
+  std::string _headKey;
+  std::string _minKey;
   std::string _data;
-  std::vector<uint32_t> _restart_Ptrs;
+  std::vector<uint32_t> _restartPtrs;
 };
 
 }
