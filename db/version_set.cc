@@ -376,6 +376,27 @@ VersionSet::VersionSet(const std::string dbName, const Options options,
 
 VersionSet::~VersionSet() {}
 
+inline int VersionSet::levelTablesNumber(int level) const
+{
+  if (level < 0 || level > MaxFileLevel) {
+    printError("VersionSet: level number error");
+  }
+  return _cur->_files[level].size();
+}
+
+inline uint64_t VersionSet::levelTablesBytes(int level) const
+{
+  if (level < 0 || level > MaxFileLevel) {
+    printError("VersionSet: level number error");
+  }
+  uint64_t result = 0;
+  for (auto f : _cur->_files[level]) {
+    result += f->fileSize;
+  }
+
+  return result;
+}
+
 void VersionSet::finalize(Version* version)
 {
   int baseLevel = -1;
@@ -417,7 +438,7 @@ void VersionSet::finalize(Version* version)
 
 void VersionSet::appendVersion(Version* version)
 {
-  assert(version->_ref == 0);  
+  assert(version->_ref == 0);
   assert(version != _cur);
 
   if (_cur != nullptr) _cur->unRef();

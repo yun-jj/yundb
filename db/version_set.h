@@ -48,7 +48,7 @@ class Version
   // Begin is nullptr means before all keys
   // end is nullptr means after all keys
   void getOverlappingInputs(int level, const Slice* begin, const Slice* end,
-                                     std::vector<std::shared_ptr<FileMeta>>& inputs);
+                            std::vector<std::shared_ptr<FileMeta>>& inputs);
   // Return a level for compact memtable
   int pickLevelForMemTableOutput(const Slice& smallestUserKey,
                                  const Slice& largestUserKey);
@@ -98,6 +98,7 @@ class VersionSet
   VersionSet(const std::string dbName, const Options options,
              std::shared_ptr<Comparator> internalComparator,
              std::shared_ptr<TableCache> tableCache);
+
   ~VersionSet();
   // Apply *edit to the current version to form a new descriptor that
   // is both saved to persistent state and installed as the new
@@ -115,26 +116,9 @@ class VersionSet
 
   uint64_t getNewFileNumber() {return _nextFileNumber++;}
 
-  int levelTablesNumber(int level) const
-  {
-    if (level < 0 || level > MaxFileLevel) {
-      printError("VersionSet: level number error");
-    }
-    return _cur->_files[level].size();
-  }
+  inline int levelTablesNumber(int level) const;
 
-  uint64_t levelTablesBytes(int level) const
-  {
-    if (level < 0 || level > MaxFileLevel) {
-      printError("VersionSet: level number error");
-    }
-    uint64_t result = 0;
-    for (auto f : _cur->_files[level]) {
-      result += f->fileSize;
-    }
-
-    return result;
-  }
+  inline uint64_t levelTablesBytes(int level) const;
 
  private:
   
