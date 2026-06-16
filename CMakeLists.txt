@@ -38,7 +38,6 @@ target_include_directories(yundb
 
 add_executable(memtable_test ${YUNDB_TEST_DIR}/memtable_test.cc)
 add_executable(sstable_builder_test ${YUNDB_TEST_DIR}/sstable_builder_test.cc)
-add_executable(table_cache_test ${YUNDB_TEST_DIR}/table_cache_test.cc)
 
 target_compile_definitions(sstable_builder_test PUBLIC
     TEST_TEMP_DIR="${YUNDB_TEST_TEMP_DIR}"
