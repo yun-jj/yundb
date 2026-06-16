@@ -59,14 +59,14 @@ class VersionEdit
       );
   }
 
-  void deleteFile(int level, uint64_t fileNumber){
-    _deleteFiles.insert(std::make_pair(level, fileNumber));
-  }
+  void deleteFile(int level, uint64_t fileNumber)
+  { _deleteFiles.insert(std::make_pair(level, fileNumber)); }
 
   void setComparatorName(std::string name)
   {
-    if (name.empty())
+    if (name.empty()) {
       printError("VersionEdit: comparator name is empty");
+    }
     _comparatorName = name;
   }
 
@@ -95,7 +95,7 @@ class VersionEdit
   }
 
   void setCompactPointer(int level, const std::string& key)
-  {_compactPoints.push_back(std::make_pair(level, key));}
+  { _compactPoints.push_back(std::make_pair(level, key)); }
 
  private:
   friend class VersionSet;

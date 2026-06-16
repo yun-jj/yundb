@@ -117,18 +117,21 @@ class VersionSet
 
   int levelTablesNumber(int level) const
   {
-    if (level < 0 || level > MaxFileLevel)
+    if (level < 0 || level > MaxFileLevel) {
       printError("VersionSet: level number error");
+    }
     return _cur->_files[level].size();
   }
 
   uint64_t levelTablesBytes(int level) const
   {
-    if (level < 0 || level > MaxFileLevel)
+    if (level < 0 || level > MaxFileLevel) {
       printError("VersionSet: level number error");
+    }
     uint64_t result = 0;
-    for (auto f : _cur->_files[level])
+    for (auto f : _cur->_files[level]) {
       result += f->fileSize;
+    }
 
     return result;
   }

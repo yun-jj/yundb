@@ -54,10 +54,12 @@ bool decodeIndexEntry(const char* entry,
 std::string BlockHandle::encode(uint64_t position, uint64_t size) const
 {
   // Sanity check that all fields have been set
-  if (position == ~static_cast<uint64_t>(0))
+  if (position == ~static_cast<uint64_t>(0)) {
     printError("BlockHandle::Encode: error position value");
-  if (size == ~static_cast<uint64_t>(0))
+  }
+  if (size == ~static_cast<uint64_t>(0)) {
     printError("BlockHandle::Encode: error size value");
+  }
   std::string result;
   PutVarint64(&result, position);
   PutVarint64(&result, size);
@@ -78,20 +80,23 @@ const char* BlockHandle::decodeFrom(const char* data)
 
 Footer::Footer(const Slice& footerBlock)
 {
-  if (footerBlock.size() != MaxFooterSize)
+  if (footerBlock.size() != MaxFooterSize) {
     printError("Footer: footer size error");
+  }
 
   const char* data = footerBlock.data();
 
   uint32_t flag1, flag2;
 
   flag1 = DecodeFixed32(data + BlockHandle::kMaxEncodedLength * 2);
-  if (static_cast<uint32_t>(TableMagicNumber & 0xffffffffu) != flag1)
+  if (static_cast<uint32_t>(TableMagicNumber & 0xffffffffu) != flag1) {
     printError("Footer: flag number error");
+  }
 
   flag2 = DecodeFixed32(data + BlockHandle::kMaxEncodedLength * 2 + 4);
-  if (static_cast<uint32_t>(TableMagicNumber >> 32) != flag2)
+  if (static_cast<uint32_t>(TableMagicNumber >> 32) != flag2) {
     printError("Footer: flag number error");
+  }
 
   data = _metaIndexHandle.decodeFrom(data);
   _indexBlockHandle.decodeFrom(data);

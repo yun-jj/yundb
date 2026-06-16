@@ -37,32 +37,27 @@ void VersionEdit::clear()
 
 void VersionEdit::encode(std::string* dst)
 {
-  if (_hasComparatorName)
-  {
+  if (_hasComparatorName) {
     PutVarint32(dst, ComparatorNameTag);
     PutLengthPrefixedSlice(dst, _comparatorName);
   }
 
-  if (_hasLogNumber)
-  {
+  if (_hasLogNumber) {
     PutVarint32(dst, LogNumber);
     PutVarint64(dst, _logNumber);
   }
 
-  if (_hasPreLogNumber)
-  {
+  if (_hasPreLogNumber) {
     PutVarint32(dst, PreLogNumber);
     PutVarint64(dst, _preLogNumber);
   }
   
-  if (_hasNextFileNumber)
-  {
+  if (_hasNextFileNumber) {
     PutVarint32(dst, NextFileNumber);
     PutVarint64(dst, _nextFileNumber);
   }
 
-  if (_hasLastSequenceNumber)
-  {
+  if (_hasLastSequenceNumber) {
     PutVarint32(dst, LastSequnce);
     PutVarint64(dst, _lastSequenceNumber);
   }
@@ -105,8 +100,9 @@ static bool getLevel(Slice* input, int* level) {
 
 static bool getKey(Slice* input, Slice* dst)
 {
-  if (GetLengthPrefixedSlice(input, dst))
+  if (GetLengthPrefixedSlice(input, dst)) {
     return true;
+  }
   return false;
 }
 
@@ -124,8 +120,10 @@ void VersionEdit::decode(const Slice& data)
   Slice str;
   Slice key;
 
-  while (msg == nullptr && GetVarint32(&input, &tag)) {
-    switch (tag) {
+  while (msg == nullptr && GetVarint32(&input, &tag))
+  {
+    switch (tag)
+    {
       case ComparatorNameTag:
         if (GetLengthPrefixedSlice(&input, &str)) {
           _comparatorName = str.toString();

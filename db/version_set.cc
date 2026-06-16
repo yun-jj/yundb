@@ -25,8 +25,7 @@ static uint64_t maxBytesForLevel(int level)
   // Init for 10 MB
   uint64_t result = 10 * 1048576;
   
-  while (level > 0)
-  {
+  while (level > 0) {
     result *= 10;
     level--;
   }
@@ -102,8 +101,9 @@ static int64_t maxGrandParentOverlapBytes(const Options* options)
 static size_t totalFileSize(const std::vector<std::shared_ptr<FileMeta>>& files)
 {
   size_t sums = 0;
-  for (auto& f : files)
+  for (auto& f : files) {
     sums += f->fileSize;
+  }
   return sums;
 }
 
@@ -118,15 +118,16 @@ void Version::ref()
 
 bool Version::unRef()
 {
-  if (_ref <= 0)
+  if (_ref <= 0) {
     printError("Version: ref <= 0");
+  }
 
-  if (this == &_versionSet->_dummyVersion)
+  if (this == &_versionSet->_dummyVersion) {
     printError("Version: unRef a dummyVersion");
+  }
   _ref--;
 
-  if (_ref == 0)
-  {
+  if (_ref == 0) {
     delete this;
     return true;
   }
@@ -267,8 +268,7 @@ void VersionSet::Builder::maybeAddFile(Version* v, int level,
     // Deleted file do nothing
   } else {
     std::vector<std::shared_ptr<FileMeta>>& files = v->_files[level];
-    if (level > 0 && !files.empty())
-    {
+    if (level > 0 && !files.empty()) {
       assert(_set->_comparator->cmp(
         files.back()->largest, f->smallest) < 0);
     }
@@ -280,15 +280,13 @@ void VersionSet::Builder::maybeAddFile(Version* v, int level,
 void VersionSet::Builder::apply(VersionEdit* edit)
 {
   // Update compaction pointers
-  for (int i = 0; edit->_compactPoints.size() > i; i++) 
-  {
+  for (int i = 0; edit->_compactPoints.size() > i; i++) {
     int level = edit->_compactPoints[i].first;
     _set->_compactPoints[level] = edit->_compactPoints[i].second;
   }
 
   // Update deleted files
-  for (const auto& pair : edit->_deleteFiles)
-  {
+  for (const auto& pair : edit->_deleteFiles) {
     int level = pair.first;
     _deleteFiles[level].insert(pair.second);
   }
@@ -343,13 +341,13 @@ void VersionSet::Builder::saveTo(Version* v)
            baseIter != bpos; ++baseIter) {
         maybeAddFile(v, level, *baseIter);
       }
-
       maybeAddFile(v, level, file);
     }
 
     // Add remaining base files
-    for (; baseIter != baseEnd; ++baseIter)
+    for (; baseIter != baseEnd; ++baseIter) {
       maybeAddFile(v, level, *baseIter);
+    }
     
     // Checking there is no overlap
     if (level > 0)
@@ -357,9 +355,10 @@ void VersionSet::Builder::saveTo(Version* v)
       for (uint32_t i = 1; i < v->_files[level].size(); i++)
       {
         const auto& prevEnd = v->_files[level][i - 1]->largest;
-        const auto& thisBegin= v->_files[level][i]->smallest;
-        if (_set->_comparator->cmp(prevEnd, thisBegin) >= 0)
+        const auto& thisBegin = v->_files[level][i]->smallest;
+        if (_set->_comparator->cmp(prevEnd, thisBegin) >= 0) {
           printError("VersionSet: overlapping ranges in level ", level);
+        }
       }
     }
   }
@@ -401,15 +400,12 @@ void VersionSet::finalize(Version* version)
 
       curScore = static_cast<double>(version->_files[level].size())
         / static_cast<double>(L0CompactionTrigger);
-    }
-    else
-    {
+    } else {
       curScore = static_cast<double>(levelTablesBytes(level))
         / static_cast<double>(maxBytesForLevel(level));
     }
 
-    if (curScore > baseScore)
-    {
+    if (curScore > baseScore) {
       baseScore = curScore;
       baseLevel = level;
     }
@@ -443,16 +439,18 @@ void VersionSet::saveSnapshot(log::Writer* log)
   // Save compaction pointers
   for (int level = 0; MaxFileLevel > level; level++)
   {
-    if (!_compactPoints[level].empty())
+    if (!_compactPoints[level].empty()) {
       edit.setCompactPointer(level, _compactPoints[level]);
+    }
   }
 
   // Save files
   for (int level = 0; MaxFileLevel > level; level++)
   {
     auto& fileVector = _cur->_files[level];
-    for (auto& f : fileVector)
+    for (auto& f : fileVector) {
       edit.addFile(level, f->number, f->fileSize, f->smallest, f->largest);
+    }
   }
 
   std::string record;
@@ -462,17 +460,18 @@ void VersionSet::saveSnapshot(log::Writer* log)
 
 bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
 {
-  if (edit._hasLogNumber)
-  {
+  if (edit._hasLogNumber) {
     if (edit._logNumber < _logNumber || 
         edit._logNumber >= _nextFileNumber) {
         printError("VersionSet: log number error");
       }
+  } else {
+    edit.setLogNumber(_logNumber);
   }
-  else edit.setLogNumber(_logNumber);
 
-  if (!edit._hasPreLogNumber)
+  if (!edit._hasPreLogNumber) {
     edit.setPreLogNumber(_preLogNumber);
+  }
 
   edit.setNextFileNumber(_nextFileNumber);
   edit.setLastSequence(_lastSequence);
@@ -511,8 +510,9 @@ bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
     _descriptorLog->appendRecord(record);
     _descriptorFile->sync();
 
-    if (!newManifestFile.empty())
+    if (!newManifestFile.empty()) {
       setCurrentFile(_options.env, _dbName, _manifestFileNumber);
+    }
 
     mu->Lock();
   }
@@ -528,10 +528,10 @@ void VersionSet::addLiveFiles(std::set<uint64_t>& liveFiles) const
 {
   for (Version* v = _dummyVersion._next; v != &_dummyVersion; v = v->_next)
   {
-    for (int level = 0; MaxFileLevel > level; level++)
-    {
-      for (const auto& f : v->_files[level])
+    for (int level = 0; MaxFileLevel > level; level++) {
+      for (const auto& f : v->_files[level]) {
         liveFiles.insert(f->number);
+      }
     }
   }
 }
