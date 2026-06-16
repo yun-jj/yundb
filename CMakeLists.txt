@@ -54,9 +54,3 @@ target_compile_definitions(sstable_builder_test PUBLIC
           yundb
           GTest::gtest_main
   )
-
-  target_link_libraries(table_cache_test
-      PRIVATE 
-          yundb
-          GTest::gtest_main
-  )
