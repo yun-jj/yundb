@@ -13,17 +13,22 @@
 
 namespace yundb
 {
+
+struct InternalKey
+{
+  InternalKey(const std::string key) : internalKey(key) {}
+  Slice getUserKey() const
+  { return Slice(internalKey.data(), internalKey.size() - KeyTagSize); }
+  void setKey(const Slice& key){ internalKey.assign(key.data(), key.size()); }
+  std::string internalKey;
+};
+
 // FileMeta requires std::shared_ptr for automatic cleanup
 struct FileMeta
 {
-  FileMeta() : ref(0), allowedSeek(AllowedSeekTime), fileSize(0) {}
+  FileMeta();
   FileMeta(uint64_t fileNumber, size_t fileSize,
-           const std::string& smallest, const std::string& largest)
-      : ref(0),
-        allowedSeek(AllowedSeekTime),
-        number(fileNumber),
-        smallest(smallest),
-        largest(largest) {}
+           const std::string& smallest, const std::string& largest);
   
   int ref;
   // Allowed seek time
@@ -31,9 +36,9 @@ struct FileMeta
   // The file number
   uint64_t number;
   // The largest key
-  std::string smallest;
+  std::shared_ptr<InternalKey> smallest;
   // The smallest key;
-  std::string largest;
+  std::shared_ptr<InternalKey> largest;
   size_t fileSize;
 };
 

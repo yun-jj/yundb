@@ -120,8 +120,11 @@ int InternalComparator::cmp(const Slice& key1, const Slice& key2) const
     decodeSeqAndType(decodedKey2.data() + decodedKey2Len - KeyTagSize,
                      &key2Seq, nullptr);
 
-    if (key1Seq > key2Seq) rs = +1;
-    else if (key1Seq < key2Seq) rs = -1;
+    if (key1Seq > key2Seq) {
+      rs = +1;
+    } else if (key1Seq < key2Seq) {
+      rs = -1;
+    }
   }
 
   return rs;

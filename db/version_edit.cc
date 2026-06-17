@@ -1,6 +1,8 @@
 #include "version_edit.h"
 #include "util/coding.h"
 
+#include <memory>
+
 namespace yundb
 {
 
@@ -18,6 +20,16 @@ enum LogTag
   NewFile = 9,
 };
 
+FileMeta::FileMeta() : ref(0), allowedSeek(AllowedSeekTime), fileSize(0) {}
+
+FileMeta::FileMeta(uint64_t fileNumber, size_t fileSize,
+                   const std::string& smallest, const std::string& largest)
+      : ref(0),
+        allowedSeek(AllowedSeekTime),
+        number(fileNumber),
+        smallest(std::make_shared<InternalKey>(smallest)),
+        largest(std::make_shared<InternalKey>(largest)) {}
+ 
 void VersionEdit::clear()
 {
   _comparatorName.clear();
@@ -83,8 +95,8 @@ void VersionEdit::encode(std::string* dst)
     PutVarint32(dst, _newFiles[i].first);
     PutVarint32(dst, file->number);
     PutVarint32(dst, file->fileSize);
-    PutLengthPrefixedSlice(dst, file->largest);
-    PutLengthPrefixedSlice(dst, file->smallest);
+    PutLengthPrefixedSlice(dst, file->largest->internalKey);
+    PutLengthPrefixedSlice(dst, file->smallest->internalKey);
   }
 }
 
@@ -189,8 +201,8 @@ void VersionEdit::decode(const Slice& data)
             getKey(&input, &smallest) &&
             getKey(&input, &largest))
         {
-          f->largest = largest.toString();
-          f->smallest = smallest.toString();
+          f->smallest->setKey(smallest);
+          f->largest->setKey(largest);
           _newFiles.push_back(std::make_pair(level, f));
         } else {
           msg = "new-file entry";

@@ -39,6 +39,12 @@ class VersionSet;
 class Version
 {
  public:
+  // Call func(arg, level, f) for every file that overlaps user_key in
+  // order from newest to oldest.  If an invocation of func returns
+  // false, makes no more calls.
+  // REQUIRES: user portion of internal_key == user_key.
+  void ForEachOverlapping(const Slice& userKey, const Slice& internalKey,
+                          bool (*func)(void* arg, int level, FileMeta* f), void* arg);
   // Returns true iff some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].
   // smallest_user_key==nullptr represents a key smaller than all the DB's keys.

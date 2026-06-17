@@ -6,19 +6,26 @@
 namespace yundb
 {
 
-static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
+static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* userKey,
                       const std::shared_ptr<FileMeta> f)
 {
   // null user_key occurs before all keys and is therefore never after *f
-  return (key != nullptr && cmp->cmp(*key, f->largest) > 0); 
+  return (userKey != nullptr && cmp->cmp(*userKey, f->largest->getUserKey()) > 0); 
 }
 
-static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* key,
+static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* userKey,
                        const std::shared_ptr<FileMeta> f)
 {
   // null user_key occurs after all keys and is therefore never before *f
-  return (key != nullptr && cmp->cmp(*key, f->smallest) < 0);
+  return (userKey != nullptr && cmp->cmp(*userKey, f->smallest->getUserKey()) < 0);
 }
+
+static bool fileOverlaps(const std::shared_ptr<Comparator> cmp, const Slice* smallestUserKey,
+                         const Slice* largestUserKey, const std::shared_ptr<FileMeta> f)
+{ return !afterFile(cmp, smallestUserKey, f) && !beforeFile(cmp, largestUserKey, f); }
+
+static bool NewFileCmp(const FileMeta* file1, const FileMeta* file2)
+{ return file1->number < file2->number; }
 
 static uint64_t maxBytesForLevel(int level)
 {
@@ -33,16 +40,17 @@ static uint64_t maxBytesForLevel(int level)
   return result;
 }
 
-int findFile(const std::shared_ptr<Comparator> cmp,
+int findFile(const std::shared_ptr<Comparator> internalKeyCmp,
              const std::vector<std::shared_ptr<FileMeta>>& files,
-             const Slice& key)
+             const Slice& internalKey)
 {
   uint32_t left = 0;
   uint32_t right = files.size();
-  while (left < right) {
+  while (left < right)
+  {
     uint32_t mid = (left + right) / 2;
     const auto& f = files[mid];
-    if (cmp->cmp(f->largest, key) < 0) {
+    if (internalKeyCmp->cmp(f->largest->internalKey, internalKey) < 0) {
       // Key at "mid.largest" is < "target".  Therefore all
       // files at or before "mid" are uninteresting.
       left = mid + 1;
@@ -58,15 +66,16 @@ int findFile(const std::shared_ptr<Comparator> cmp,
 bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
                            bool disjointSortedFiles,
                            const std::vector<std::shared_ptr<FileMeta>>& files,
-                           const Slice* smallestUserKey,
-                           const Slice* largestUserKey)
+                           const InternalKey* smallestKey,
+                           const InternalKey* largestKey)
 {
-  if (!disjointSortedFiles) {
+  if (!disjointSortedFiles)
+  {
     // Need to check against all files
-    for (size_t i = 0; i < files.size(); i++) {
+    for (size_t i = 0; i < files.size(); i++)
+    {
       const auto& f = files[i];
-      if (afterFile(cmp, smallestUserKey, f) ||
-          beforeFile(cmp, largestUserKey, f)) {
+      if (fileOverlaps(cmp, &smallestKey->getUserKey(), &largestKey->getUserKey(), f)) {
         // No overlap
       } else {
         return true;  // Overlap
@@ -77,9 +86,9 @@ bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
 
   // Binary search over file list
   uint32_t index = 0;
-  if (smallestUserKey != nullptr) {
+  if (smallestKey != nullptr) {
     // Find the earliest possible internal key for smallest_user_key
-    index = findFile(cmp, files, *smallestUserKey);
+    index = findFile(cmp, files, smallestKey->internalKey);
   }
 
   if (index >= files.size()) {
@@ -87,7 +96,7 @@ bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
     return false;
   }
 
-  return !beforeFile(cmp, largestUserKey, files[index]);
+  return !beforeFile(cmp, &largestKey->getUserKey(), files[index]);
 }
 
 static size_t targetFileSize(const Options* options)
@@ -135,6 +144,34 @@ bool Version::unRef()
   return false;
 }
 
+void Version::ForEachOverlapping(const Slice& userKey, const Slice& internalKey,
+                                 bool (*func)(void* arg, int level, FileMeta* f), void* arg)
+{
+  std::vector<std::shared_ptr<FileMeta>> sortFile;
+  auto ucmp = _versionSet->_comparator;
+  auto icmp = std::make_shared<Comparator>(InternalComparator(_versionSet->_options));
+
+  sortFile = _files[0];
+  for (auto& file : sortFile)
+  {
+    if (fileOverlaps(ucmp, &userKey, &userKey, file)) {
+      if (!func(arg, 0, file.get())) break;
+    }
+  }
+
+  for (int level = 1; MaxFileLevel > level; level++)
+  {
+    if (_files[level].empty()) continue;
+    sortFile = _files[level];
+    std::sort(sortFile.begin(), sortFile.end(), NewFileCmp);
+
+    auto index = findFile(icmp, sortFile, internalKey);
+    if (index != sortFile.size() && !func(arg, level, sortFile[index].get())) {
+      return;
+    }
+  }
+}
+
 bool Version::overlapInLevel(int level, const Slice* smallestUserKey,
                              const Slice* largestUserKey)
 {
@@ -156,8 +193,8 @@ void Version::getOverlappingInputs(int level, const Slice* begin,
   for (size_t i = 0; i < _files[level].size();)
   {
     auto& f = _files[level][i++];
-    const Slice fileStart(f->smallest);
-    const Slice fileLimit(f->largest);
+    const Slice fileStart(f->smallest->getUserKey());
+    const Slice fileLimit(f->largest->getUserKey());
     if (begin != nullptr && cmp->cmp(fileLimit, *begin) < 0) {
       // "f" is completely before specified range; skip it
     } else if (end != nullptr && cmp->cmp(fileStart, *end) > 0) {
@@ -228,9 +265,12 @@ class VersionSet::Builder
     bool operator()(const std::shared_ptr<FileMeta> f1,
                     const std::shared_ptr<FileMeta> f2) const
     {
-      int r = internalComparator->cmp(f1->smallest, f2->smallest);
-      if (r != 0) return (r < 0);
-      return (f1->number < f2->number);
+      int r = internalComparator->cmp(f1->smallest->internalKey, f2->smallest->internalKey);
+      if (r != 0) {
+        return (r < 0);
+      } else {
+        return (f1->number < f2->number);
+      }
     }
   };
 
@@ -270,7 +310,7 @@ void VersionSet::Builder::maybeAddFile(Version* v, int level,
     std::vector<std::shared_ptr<FileMeta>>& files = v->_files[level];
     if (level > 0 && !files.empty()) {
       assert(_set->_comparator->cmp(
-        files.back()->largest, f->smallest) < 0);
+        files.back()->largest->getUserKey(), f->smallest->getUserKey()) < 0);
     }
     f->ref++;
     files.push_back(f);
@@ -356,7 +396,7 @@ void VersionSet::Builder::saveTo(Version* v)
       {
         const auto& prevEnd = v->_files[level][i - 1]->largest;
         const auto& thisBegin = v->_files[level][i]->smallest;
-        if (_set->_comparator->cmp(prevEnd, thisBegin) >= 0) {
+        if (_set->_comparator->cmp(prevEnd->getUserKey(), thisBegin->getUserKey()) >= 0) {
           printError("VersionSet: overlapping ranges in level ", level);
         }
       }
@@ -470,7 +510,8 @@ void VersionSet::saveSnapshot(log::Writer* log)
   {
     auto& fileVector = _cur->_files[level];
     for (auto& f : fileVector) {
-      edit.addFile(level, f->number, f->fileSize, f->smallest, f->largest);
+      edit.addFile(level, f->number, f->fileSize,
+                   f->smallest->internalKey, f->largest->internalKey);
     }
   }
 
