@@ -17,6 +17,7 @@ namespace yundb
 struct InternalKey
 {
   InternalKey(const std::string key) : internalKey(key) {}
+  InternalKey(const Slice& key) : internalKey(key.data(), key.size()) {}
   Slice getUserKey() const
   { return Slice(internalKey.data(), internalKey.size() - KeyTagSize); }
   void setKey(const Slice& key){ internalKey.assign(key.data(), key.size()); }

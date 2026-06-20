@@ -76,9 +76,9 @@ bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
     {
       const auto& f = files[i];
       if (fileOverlaps(cmp, &smallestKey->getUserKey(), &largestKey->getUserKey(), f)) {
-        // No overlap
+        return true; // Overlap
       } else {
-        return true;  // Overlap
+        // No overlap
       }
     }
     return false;
@@ -87,7 +87,7 @@ bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
   // Binary search over file list
   uint32_t index = 0;
   if (smallestKey != nullptr) {
-    // Find the earliest possible internal key for smallest_user_key
+    // Find the earliest possible internal key for smallestkey
     index = findFile(cmp, files, smallestKey->internalKey);
   }
 
@@ -150,7 +150,7 @@ void Version::forEachOverlapping(const Slice& userKey, const Slice& internalKey,
   std::vector<std::shared_ptr<FileMeta>> sortFile;
   auto ucmp = _versionSet->_comparator;
   auto icmp = std::make_shared<Comparator>(InternalComparator(_versionSet->_options));
-
+  
   sortFile = _files[0];
   for (auto& file : sortFile)
   {
@@ -172,16 +172,16 @@ void Version::forEachOverlapping(const Slice& userKey, const Slice& internalKey,
   }
 }
 
-bool Version::overlapInLevel(int level, const Slice* smallestUserKey,
-                             const Slice* largestUserKey)
+bool Version::overlapInLevel(int level, const InternalKey* smallestKey,
+                             const InternalKey* largestKey)
 {
   return someFileOverlapsRange(_versionSet->_comparator, (level > 0), _files[level],
-                               smallestUserKey, largestUserKey);
+                               smallestKey, largestKey);
 }
 
 // Store in "*inputs" all files in "level" that overlap [begin,end]
-void Version::getOverlappingInputs(int level, const Slice* begin,
-                                   const Slice* end,
+void Version::getOverlappingInputs(int level, const Slice* beginUserKey,
+                                   const Slice* endUserKey,
                                    std::vector<std::shared_ptr<FileMeta>>& inputs)
 {
   assert(level >= 0);
@@ -195,9 +195,9 @@ void Version::getOverlappingInputs(int level, const Slice* begin,
     auto& f = _files[level][i++];
     const Slice fileStart(f->smallest->getUserKey());
     const Slice fileLimit(f->largest->getUserKey());
-    if (begin != nullptr && cmp->cmp(fileLimit, *begin) < 0) {
+    if (beginUserKey != nullptr && cmp->cmp(fileLimit, *beginUserKey) < 0) {
       // "f" is completely before specified range; skip it
-    } else if (end != nullptr && cmp->cmp(fileStart, *end) > 0) {
+    } else if (endUserKey != nullptr && cmp->cmp(fileStart, *endUserKey) > 0) {
       // "f" is completely after specified range; skip it
     }
     else
@@ -207,15 +207,15 @@ void Version::getOverlappingInputs(int level, const Slice* begin,
       {
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
-        if (begin != nullptr && cmp->cmp(fileStart, *begin) < 0)
+        if (beginUserKey != nullptr && cmp->cmp(fileStart, *beginUserKey) < 0)
         {
-          begin = &fileStart;
+          beginUserKey = &fileStart;
           inputs.clear();
           i = 0;
         }
-        else if (end != nullptr && cmp->cmp(fileLimit, *end) > 0)
+        else if (endUserKey != nullptr && cmp->cmp(fileLimit, *endUserKey) > 0)
         {
-          end = &fileLimit;
+          endUserKey = &fileLimit;
           inputs.clear();
           i = 0;
         }
@@ -224,25 +224,25 @@ void Version::getOverlappingInputs(int level, const Slice* begin,
   }
 }
 
-int Version::pickLevelForMemTableOutput(const Slice& smallestUserKey,
-                                        const Slice& largestUserKey)
+int Version::pickLevelForMemTableOutput(const InternalKey& smallestKey,
+                                        const InternalKey& largestKey)
 {
   int level = 0;
-  if (!overlapInLevel(0, &smallestUserKey, &largestUserKey))
+  if (!overlapInLevel(0, &smallestKey, &largestKey))
   {
     std::vector<std::shared_ptr<FileMeta>> overlaps;
     // Push to next level if there is no overlap in next level,
     // and the #bytes overlapping in the level after that are limited.
     while (level < MaxMemCompactLevel)
     {
-      if (overlapInLevel(level + 1, &smallestUserKey, &largestUserKey)) {
+      if (overlapInLevel(level + 1, &smallestKey, &largestKey)) {
         break;
       }
 
       if (level + 2 < MaxFileLevel)
       {
         // Check that file does not overlap too many grandparent bytes.
-        getOverlappingInputs(level + 2, &smallestUserKey, &largestUserKey,
+        getOverlappingInputs(level + 2, &smallestKey.getUserKey(), &largestKey.getUserKey(),
                              overlaps);
         const int64_t sum = totalFileSize(overlaps);
         if (sum > maxGrandParentOverlapBytes(&(_versionSet->_options))) {
@@ -418,7 +418,7 @@ VersionSet::~VersionSet() {}
 
 inline int VersionSet::levelTablesNumber(int level) const
 {
-  if (level < 0 || level > MaxFileLevel) {
+  if (level < 0 || level >= MaxFileLevel) {
     printError("VersionSet: level number error");
   }
   return _cur->_files[level].size();

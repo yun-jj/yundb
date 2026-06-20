@@ -46,18 +46,17 @@ class Version
   void forEachOverlapping(const Slice& userKey, const Slice& internalKey,
                           bool (*func)(void* arg, int level, FileMeta* f), void* arg);
   // Returns true iff some file in the specified level overlaps
-  // some part of [*smallest_user_key,*largest_user_key].
-  // smallest_user_key==nullptr represents a key smaller than all the DB's keys.
-  // largest_user_key==nullptr represents a key largest than all the DB's keys.
-  bool overlapInLevel(int level, const Slice* smallest_user_key,
-                      const Slice* largest_user_key);
+  // some part of [*smallest_internalkey,*largest_internalkey].
+  // smallest_internalkey==nullptr represents a key smaller than all the DB's keys.
+  // largest_internalkey==nullptr represents a key largest than all the DB's keys.
+  bool overlapInLevel(int level, const InternalKey* smallestKey, const InternalKey* largestKey);
   // Begin is nullptr means before all keys
   // end is nullptr means after all keys
   void getOverlappingInputs(int level, const Slice* begin, const Slice* end,
                             std::vector<std::shared_ptr<FileMeta>>& inputs);
   // Return a level for compact memtable
-  int pickLevelForMemTableOutput(const Slice& smallestUserKey,
-                                 const Slice& largestUserKey);
+  int pickLevelForMemTableOutput(const InternalKey& smallestKey, const InternalKey& largestKey);
+
   void ref();
 
   // Return false if the reference count has already dropped to zero, and deletes this.

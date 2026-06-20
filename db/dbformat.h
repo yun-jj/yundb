@@ -33,6 +33,7 @@ constexpr const int BlockTrailerSize = 5;
 // When time == 0 this file will be compation
 constexpr const uint32_t AllowedSeekTime = (1 << 30);
 
+// Maximum level number, levels are numbered from 0 to MaxFileLevel-1
 constexpr const int MaxFileLevel = 7;
 
 // Level-0 compaction is started when we hit this many files.
