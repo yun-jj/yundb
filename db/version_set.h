@@ -52,7 +52,7 @@ class Version
   bool overlapInLevel(int level, const InternalKey* smallestKey, const InternalKey* largestKey);
   // Begin is nullptr means before all keys
   // end is nullptr means after all keys
-  void getOverlappingInputs(int level, const Slice* begin, const Slice* end,
+  void getOverlappingInputs(int level, const Slice& beginUserKey, const Slice& endUserKey,
                             std::vector<std::shared_ptr<FileMeta>>& inputs);
   // Return a level for compact memtable
   int pickLevelForMemTableOutput(const InternalKey& smallestKey, const InternalKey& largestKey);

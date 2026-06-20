@@ -98,17 +98,16 @@ bool setCurrentFile(Env* env, const std::string& dbname,
   std::string tmp = generateTempFileName(descriptorNumber, dbname);
   bool result = writeStringToFileSync(env, content.toString() + "\n", tmp); 
 
-  if (result)
-  {
+  if (result) {
     bool result = env->renameFile(tmp, currentFileName(dbname));
 
-    if (!result)
-    {
+    if (!result) {
       env->removeFile(tmp);
       return false;
     }
+  } else {
+    return false;
   }
-  else return false;
 
   return true;
 }

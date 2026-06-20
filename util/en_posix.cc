@@ -282,13 +282,10 @@ class WritablePosixFile final : public WritableFile
     {
       if (_permanentFd)
       {
-        if (::close(_fd) == 0)
-        {
+        if (::close(_fd) == 0) {
           _fd = -1;
           _limiter->release();
-        }
-        else
-        {
+        } else {
           std::cerr << "close file: " << _filename << " fail\n";
           return;
         }

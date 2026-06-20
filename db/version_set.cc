@@ -6,25 +6,25 @@
 namespace yundb
 {
 
-static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice* userKey,
+static bool afterFile(const std::shared_ptr<Comparator> cmp, const Slice& userKey,
                       const std::shared_ptr<FileMeta> f)
 {
   // null user_key occurs before all keys and is therefore never after *f
-  return (userKey != nullptr && cmp->cmp(*userKey, f->largest->getUserKey()) > 0); 
+  return (userKey != nullptr && cmp->cmp(userKey, f->largest->getUserKey()) > 0); 
 }
 
-static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice* userKey,
+static bool beforeFile(const std::shared_ptr<Comparator> cmp, const Slice& userKey,
                        const std::shared_ptr<FileMeta> f)
 {
   // null user_key occurs after all keys and is therefore never before *f
-  return (userKey != nullptr && cmp->cmp(*userKey, f->smallest->getUserKey()) < 0);
+  return (userKey != nullptr && cmp->cmp(userKey, f->smallest->getUserKey()) < 0);
 }
 
-static bool fileOverlaps(const std::shared_ptr<Comparator> cmp, const Slice* smallestUserKey,
-                         const Slice* largestUserKey, const std::shared_ptr<FileMeta> f)
+static bool fileOverlaps(const std::shared_ptr<Comparator> cmp, const Slice& smallestUserKey,
+                         const Slice& largestUserKey, const std::shared_ptr<FileMeta> f)
 { return !afterFile(cmp, smallestUserKey, f) && !beforeFile(cmp, largestUserKey, f); }
 
-static bool NewFileCmp(const FileMeta* file1, const FileMeta* file2)
+static bool NewFileCmp(const std::shared_ptr<FileMeta> file1, const std::shared_ptr<FileMeta> file2)
 { return file1->number < file2->number; }
 
 static uint64_t maxBytesForLevel(int level)
@@ -75,7 +75,7 @@ bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
     for (size_t i = 0; i < files.size(); i++)
     {
       const auto& f = files[i];
-      if (fileOverlaps(cmp, &smallestKey->getUserKey(), &largestKey->getUserKey(), f)) {
+      if (fileOverlaps(cmp, smallestKey->getUserKey(), largestKey->getUserKey(), f)) {
         return true; // Overlap
       } else {
         // No overlap
@@ -96,7 +96,7 @@ bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
     return false;
   }
 
-  return !beforeFile(cmp, &largestKey->getUserKey(), files[index]);
+  return !beforeFile(cmp, largestKey->getUserKey(), files[index]);
 }
 
 static size_t targetFileSize(const Options* options)
@@ -149,12 +149,12 @@ void Version::forEachOverlapping(const Slice& userKey, const Slice& internalKey,
 {
   std::vector<std::shared_ptr<FileMeta>> sortFile;
   auto ucmp = _versionSet->_comparator;
-  auto icmp = std::make_shared<Comparator>(InternalComparator(_versionSet->_options));
+  auto icmp = std::make_shared<InternalComparator>(_versionSet->_options);
   
   sortFile = _files[0];
   for (auto& file : sortFile)
   {
-    if (fileOverlaps(ucmp, &userKey, &userKey, file)) {
+    if (fileOverlaps(ucmp, userKey, userKey, file)) {
       if (!func(arg, 0, file.get())) break;
     }
   }
@@ -180,8 +180,8 @@ bool Version::overlapInLevel(int level, const InternalKey* smallestKey,
 }
 
 // Store in "*inputs" all files in "level" that overlap [begin,end]
-void Version::getOverlappingInputs(int level, const Slice* beginUserKey,
-                                   const Slice* endUserKey,
+void Version::getOverlappingInputs(int level, const Slice& beginUserKey,
+                                   const Slice& endUserKey,
                                    std::vector<std::shared_ptr<FileMeta>>& inputs)
 {
   assert(level >= 0);
@@ -190,14 +190,16 @@ void Version::getOverlappingInputs(int level, const Slice* beginUserKey,
   inputs.clear();
   std::shared_ptr<Comparator> cmp = _versionSet->_comparator;
 
+  Slice begin = beginUserKey, end = endUserKey;
+
   for (size_t i = 0; i < _files[level].size();)
   {
     auto& f = _files[level][i++];
     const Slice fileStart(f->smallest->getUserKey());
     const Slice fileLimit(f->largest->getUserKey());
-    if (beginUserKey != nullptr && cmp->cmp(fileLimit, *beginUserKey) < 0) {
+    if (begin != nullptr && cmp->cmp(fileLimit, begin) < 0) {
       // "f" is completely before specified range; skip it
-    } else if (endUserKey != nullptr && cmp->cmp(fileStart, *endUserKey) > 0) {
+    } else if (end != nullptr && cmp->cmp(fileStart, end) > 0) {
       // "f" is completely after specified range; skip it
     }
     else
@@ -207,15 +209,15 @@ void Version::getOverlappingInputs(int level, const Slice* beginUserKey,
       {
         // Level-0 files may overlap each other.  So check if the newly
         // added file has expanded the range.  If so, restart search.
-        if (beginUserKey != nullptr && cmp->cmp(fileStart, *beginUserKey) < 0)
+        if (begin != nullptr && cmp->cmp(fileStart, end) < 0)
         {
-          beginUserKey = &fileStart;
+          begin = fileStart;
           inputs.clear();
           i = 0;
         }
-        else if (endUserKey != nullptr && cmp->cmp(fileLimit, *endUserKey) > 0)
+        else if (end != nullptr && cmp->cmp(fileLimit, end) > 0)
         {
-          endUserKey = &fileLimit;
+          end = fileLimit;
           inputs.clear();
           i = 0;
         }
@@ -242,7 +244,7 @@ int Version::pickLevelForMemTableOutput(const InternalKey& smallestKey,
       if (level + 2 < MaxFileLevel)
       {
         // Check that file does not overlap too many grandparent bytes.
-        getOverlappingInputs(level + 2, &smallestKey.getUserKey(), &largestKey.getUserKey(),
+        getOverlappingInputs(level + 2, smallestKey.getUserKey(), largestKey.getUserKey(),
                              overlaps);
         const int64_t sum = totalFileSize(overlaps);
         if (sum > maxGrandParentOverlapBytes(&(_versionSet->_options))) {
@@ -414,7 +416,14 @@ VersionSet::VersionSet(const std::string dbName, const Options options,
         _cur(nullptr),
         _dummyVersion(this) {}
 
-VersionSet::~VersionSet() {}
+VersionSet::~VersionSet()
+{  if (_descriptorLog != nullptr) {
+    delete _descriptorLog;
+  }
+  if (_descriptorFile != nullptr) {
+    delete _descriptorFile;
+  }
+}
 
 inline int VersionSet::levelTablesNumber(int level) const
 {
