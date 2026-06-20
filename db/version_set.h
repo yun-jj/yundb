@@ -32,8 +32,8 @@ int findFile(const std::shared_ptr<Comparator> cmp,
 bool someFileOverlapsRange(const std::shared_ptr<Comparator> cmp,
                            bool disjointSortedFiles,
                            const std::vector<std::shared_ptr<FileMeta>>& files,
-                           const Slice* smallestUserKey,
-                           const Slice* largestUserKey);
+                           const InternalKey* smallestKey,
+                           const InternalKey* largestKey);
 class VersionSet;
 
 class Version
@@ -43,7 +43,7 @@ class Version
   // order from newest to oldest.  If an invocation of func returns
   // false, makes no more calls.
   // REQUIRES: user portion of internal_key == user_key.
-  void ForEachOverlapping(const Slice& userKey, const Slice& internalKey,
+  void forEachOverlapping(const Slice& userKey, const Slice& internalKey,
                           bool (*func)(void* arg, int level, FileMeta* f), void* arg);
   // Returns true iff some file in the specified level overlaps
   // some part of [*smallest_user_key,*largest_user_key].

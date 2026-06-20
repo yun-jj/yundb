@@ -144,7 +144,7 @@ bool Version::unRef()
   return false;
 }
 
-void Version::ForEachOverlapping(const Slice& userKey, const Slice& internalKey,
+void Version::forEachOverlapping(const Slice& userKey, const Slice& internalKey,
                                  bool (*func)(void* arg, int level, FileMeta* f), void* arg)
 {
   std::vector<std::shared_ptr<FileMeta>> sortFile;
