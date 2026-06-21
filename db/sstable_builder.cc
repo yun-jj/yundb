@@ -33,22 +33,22 @@ size_t SstableBuilder::writeBlock(const Slice& block)
 
   switch (type)
   {
-  case NoCompression:
-  {
-    writeData = block;
-    break;
-  }
-  case SnappyCompression:
-  {
-    if (Snappy_Compress(block.data(), block.size(), &compressionBlock) && 
-        compressionBlock.size() < block.size() - (block.size() / 8u)) {
-      writeData = compressionBlock; 
-    } else {
+    case NoCompression:
+    {
       writeData = block;
-      type = NoCompression;
+      break;
     }
-    break;
-  }
+    case SnappyCompression:
+    {
+      if (Snappy_Compress(block.data(), block.size(), &compressionBlock) && 
+          compressionBlock.size() < block.size() - (block.size() / 8u)) {
+        writeData = compressionBlock; 
+      } else {
+        writeData = block;
+        type = NoCompression;
+      }
+      break;
+    }
   } 
 
   return writeRawBlock(writeData, type);

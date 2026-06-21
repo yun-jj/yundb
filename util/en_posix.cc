@@ -239,7 +239,8 @@ class WritablePosixFile final : public WritableFile
       : _limiter(std::move(limiter)),
         _permanentFd(fd > 0),
         _closed(false),
-        _fd(_permanentFd ? fd : -1), 
+        _fd(_permanentFd ? fd : -1),
+        _pos(0),
         _filename(std::move(filename)) {}
 
   ~WritablePosixFile() override {close();}

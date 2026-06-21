@@ -44,8 +44,7 @@ TEST_F(SstableBuilderTest, sstableGenerate)
   {
     std::string key = generater.getRandString();
     std::string value = generater.getRandString();
-    memTable->add(seq , yundb::ValueType::TypeValue, key, value);
-    seq++;
+    memTable->add(seq++, yundb::ValueType::TypeValue, key, value);
   }
 
   yundb::WritableFile* file;
@@ -69,8 +68,7 @@ TEST_F(SstableBuilderTest, sstableRead)
     std::string key = generater.getRandString();
     std::string value = generater.getRandString();
     kvMap[key] = value;
-    memTable->add(seq , yundb::ValueType::TypeValue, key, value);
-    seq++;
+    memTable->add(seq++, yundb::ValueType::TypeValue, key, value);
   }
 
   options.env->newWritableFile(fileName, &writeFile);
@@ -96,11 +94,10 @@ TEST_F(SstableBuilderTest, sstableRead)
   for (const auto& kv : kvMap)
   {
     std::string value, key = kv.first;
-    yundb::PutFixed64(&key, yundb::packSeqAndType(seq, yundb::ValueType::TypeValue));
+    yundb::PutFixed64(&key, yundb::packSeqAndType(seq++, yundb::ValueType::TypeValue));
     bool found = tableCache.lookup(666666, fileSize, key, &value);
     EXPECT_TRUE(found);
     EXPECT_EQ(value, kv.second);
-    seq++;
   }
 
   if (options.env->fileExists(fileName)) {
@@ -119,9 +116,9 @@ TEST_F(SstableBuilderTest, sstableReadDeletion)
     std::string key = generater.getRandString();
     std::string value = generater.getRandString();
     kvMap[key] = "";
-    memTable->add(seq, yundb::ValueType::TypeValue, key, value);
-    memTable->add(seq, yundb::ValueType::TypeDeletion, key, "");
-    seq++;
+    memTable->add(seq++, yundb::ValueType::TypeValue, key, value);
+    value.clear();
+    memTable->add(seq++, yundb::ValueType::TypeDeletion, key, value);
   }
 
   options.env->newWritableFile(fileName, &writeFile);
@@ -130,7 +127,7 @@ TEST_F(SstableBuilderTest, sstableReadDeletion)
   options.env->newRandomAccessFile(fileName, &randomAccessfile);
   yundb::TableCache tableCache(dbName, options,
                                std::make_shared<yundb::Cache>(options.max_cache_size));
-  
+
   // Insert file into cache, so we can read data from cache when lookup
   uint64_t fileSize = 0;
   options.env->getFileSize(fileName, &fileSize);
@@ -147,11 +144,10 @@ TEST_F(SstableBuilderTest, sstableReadDeletion)
   for (const auto& kv : kvMap)
   {
     std::string value, key = kv.first;
-    yundb::PutFixed64(&key, yundb::packSeqAndType(seq, yundb::ValueType::TypeValue));
+    yundb::PutFixed64(&key, yundb::packSeqAndType(seq++, yundb::ValueType::TypeValue));
     bool found = tableCache.lookup(666666, fileSize, key, &value);
-    EXPECT_FALSE(found);
+    EXPECT_TRUE(found);
     EXPECT_TRUE(value.empty());
-    seq++;
   }
 
   if (options.env->fileExists(fileName)) {

@@ -31,8 +31,8 @@ namespace yundb
 
   void DataBlockBuilder::put(const Slice& key, const Slice& value)
   {
-    if (key.empty() || value.empty()) {
-      printError("DataBlockBuilder: empty key or value");
+    if (key.empty()) {
+      printError("DataBlockBuilder: empty key");
     }
 
     size_t pos = 0;
@@ -73,7 +73,7 @@ namespace yundb
     // Clear and prepare new data block
     _count = 0;
     _restartPtrs.clear();
-    std::string block; 
+    std::string block;
     block.swap(_data);
     _data.reserve(_options.block_size);
     return block;

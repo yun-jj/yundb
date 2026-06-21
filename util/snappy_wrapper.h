@@ -20,6 +20,16 @@ inline bool Snappy_Compress(const char* input, size_t length,
   return true;
 }
 
+inline bool Snappy_Uncompress(const char* input, size_t length, std::string* output)
+{
+  size_t outlen;
+  if (!snappy::GetUncompressedLength(input, length, &outlen)) {
+    return false;
+  }
+  output->resize(outlen);
+  return snappy::RawUncompress(input, length, &(*output)[0]);
+}
+
 inline bool Snappy_Uncompress(const char* input, size_t length, char* output)
 {return snappy::RawUncompress(input, length, output);}
 

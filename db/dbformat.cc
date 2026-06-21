@@ -40,7 +40,7 @@ CompressionType checkBlock(const Slice& block)
 
 std::string uncompressBlock(const Slice& block, CompressionType type)
 {
-  std::string result(block.size(), 0);
+  std::string result;
 
   switch (type)
   {
@@ -48,7 +48,7 @@ std::string uncompressBlock(const Slice& block, CompressionType type)
     result.assign(block.data(), block.size() - BlockTrailerSize);
     break;
   case SnappyCompression:
-    if (!Snappy_Uncompress(block.data(), block.size() - BlockTrailerSize, &result[0])) {
+    if (!Snappy_Uncompress(block.data(), block.size() - BlockTrailerSize, &result)) {
       printError("DecompressBlock: snappy uncompress error");
     }
     break;
