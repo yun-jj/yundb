@@ -17,32 +17,36 @@ std::string generateFileName(uint64_t number, const std::string& dbName,
 bool parseFileName(const std::string fileName, uint64_t* number,
                    FileType* fileType)
 {
-  if (number == nullptr || fileType == nullptr)
+  if (number == nullptr || fileType == nullptr) {
     printError("ParseFileName: nullptr");
+  }
 
   size_t pos = fileName.find_last_of("/");
   Slice name(fileName.data(), fileName.size() - pos);  
 
-  if (name == "CURRENT")
+  if (name == "CURRENT") {
     *fileType = FileType::CurrentFile;
-  else if (name == "LOCK")
+  } else if (name == "LOCK") {
     *fileType = FileType::LockFile;
-  else if (name == "LOG" || name == "LOG.old")
+  } else if (name == "LOG" || name == "LOG.old") {
     *fileType = FileType::InfoLogFile;
-  else if (name.start_with("MANIFEST-"))
+  } else if (name.start_with("MANIFEST-")) {
     *fileType = FileType::DescriptorFile;
-  else if (name.end_with(".log")) 
+  } else if (name.end_with(".log")) {
     *fileType = FileType::LogFile;
-  else if (name.end_with(".sst"))
+  } else if (name.end_with(".sst")) {
     *fileType = FileType::TableFile;
-  else if (name.end_with(".dbtmp"))
+  } else if (name.end_with(".dbtmp")) {
     *fileType = FileType::TempFile;
-  else return false;
+  } else {
+    return false;
+  }
 
-  if (*fileType == FileType::DescriptorFile)
+  if (*fileType == FileType::DescriptorFile) {
     *number = static_cast<uint64_t>(std::strtoull(name.data() + 9, nullptr, 10));
-  else
+  } else {
     *number = static_cast<uint64_t>(std::strtoull(name.data(), nullptr, 10));
+  }
   return true;
 }
 
@@ -67,8 +71,11 @@ std::string generateDescriptorFileName(uint64_t number, const std::string& dbNam
   return dbName + buf;
 }
 
-std::string generateCurrentFileName(uint64_t number, const std::string& dbName)
-{return dbName + "/CURRENT";}
+std::string generateCurrentFileName(const std::string& dbName)
+{ return dbName + "/CURRENT"; }
+
+std::string getCurrentFileName(const std::string& dbName)
+{ return generateCurrentFileName(dbName); }
 
 std::string generateTempFileName(uint64_t number, const std::string& dbName)
 {

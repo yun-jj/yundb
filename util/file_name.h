@@ -32,7 +32,9 @@ std::string generateTableFileName(uint64_t number, const std::string& dbName);
 
 std::string generateDescriptorFileName(uint64_t number, const std::string& dbName);
 
-std::string generateCurrentFileName(uint64_t number, const std::string& dbName);
+std::string generateCurrentFileName(const std::string& dbName);
+
+std::string getCurrentFileName(const std::string& dbName);
 
 std::string generateTempFileName(uint64_t number, const std::string& dbName);
 
