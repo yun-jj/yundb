@@ -54,7 +54,7 @@ class VersionEdit
   void encode(std::string* dst);
 
   // Decode edit informations
-  void decode(const Slice& data);
+  bool decode(const Slice& data);
 
   void addFile(int level, uint64_t fileNumber, size_t fileSize,
                const std::string& smallest, const std::string& largest)

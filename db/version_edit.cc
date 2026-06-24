@@ -118,7 +118,7 @@ static bool getKey(Slice* input, Slice* dst)
   return false;
 }
 
-void VersionEdit::decode(const Slice& data)
+bool VersionEdit::decode(const Slice& data)
 {
   clear();
   Slice input = data;

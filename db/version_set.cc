@@ -1,5 +1,6 @@
 #include "version_set.h"
 #include "util/file_name.h"
+#include "db/log_reader.h"
 
 #include <algorithm>
 
@@ -529,6 +530,92 @@ void VersionSet::saveSnapshot(log::Writer* log)
   log->appendRecord(record);
 }
 
+bool VersionSet::parseManifestFile(log::Reader* reader, Version *version)
+{
+  bool haveLogNumber = false;
+  bool havePrevLogNumber = false;
+  bool haveNextFile = false;
+  bool haveLastSequence = false;
+  uint64_t nextFile = 0;
+  uint64_t lastSequence = 0;
+  uint64_t logNumber = 0;
+  uint64_t prevLogNumber = 0;
+  int readRecords = 0;
+
+  Slice record;
+  std::string scratch(log::recordBlockSize, '\0');
+  Builder builder(this, _cur);
+
+  while (reader->readRecord(&record, &scratch))
+  {
+    readRecords++;
+    VersionEdit edit;
+    
+    if (edit.decode(record)) {
+      printError("VersionSet: decode manifest record error");
+      return false;
+    }
+
+    if (edit._hasComparatorName) {
+      if (edit._comparatorName != _comparator->name()) {
+        printError("VersionSet: comparator name error");
+        return false;
+      }
+    }
+
+    builder.apply(&edit);
+
+    if (edit._hasLogNumber) {
+      logNumber = edit._logNumber;
+      haveLogNumber = true;
+    }
+    if (edit._hasPreLogNumber) {
+      prevLogNumber = edit._preLogNumber;
+      havePrevLogNumber = true;
+    }
+    if (edit._hasNextFileNumber) {
+      nextFile = edit._nextFileNumber;
+      haveNextFile = true;
+    }
+    if (edit._hasLastSequenceNumber) {
+      lastSequence = edit._lastSequenceNumber;
+      haveLastSequence = true;
+    } 
+  }
+
+  if (!haveNextFile) {
+    printError("VersionSet: no meta-nextfile entry in descriptor");
+    return false;
+  } else if (!haveLogNumber) {
+    printError("VersionSet: no meta-lognumber entry in descriptor");
+    return false;
+  } else if (!haveLastSequence) {
+    printError("VersionSet: no meta-last-sequence entry in descriptor");
+    return false;
+  }
+
+  if (!havePrevLogNumber) {
+    prevLogNumber = 0;
+  }
+
+  if (_nextFileNumber <= prevLogNumber) {
+    _nextFileNumber = prevLogNumber+ 1;
+  }
+
+  if (_nextFileNumber <= logNumber) {
+    _nextFileNumber = logNumber + 1;
+  }
+
+  _manifestFileNumber = nextFile;
+  _nextFileNumber = nextFile + 1;
+  _lastSequence = lastSequence;
+  _logNumber = logNumber;
+  _preLogNumber = prevLogNumber;
+  builder.saveTo(version);
+
+  return true;
+}
+
 bool VersionSet::logAndApply(VersionEdit& edit, sync::Mutex* mu) noexcept
 {
   if (edit._hasLogNumber) {
@@ -605,6 +692,39 @@ void VersionSet::addLiveFiles(std::set<uint64_t>& liveFiles) const
       }
     }
   }
+}
+
+bool VersionSet::resume()
+{
+  std::string currentFileName = getCurrentFileName(_dbName), manifestFileName;
+  if (!readFileToString(_options.env, currentFileName, &manifestFileName)) {
+    printError("VersionSet: read current file error");
+    return false;
+  }
+
+  SequentialFile* manifestFile = nullptr;
+  _options.env->newSequentialFile(manifestFileName, &manifestFile);
+
+  if (manifestFile == nullptr) {
+    printError("VersionSet: open manifest file error");
+    return false;
+  }
+
+  log::Reader reader(manifestFile, 0, true);
+  Version* version = new Version(this);
+
+  if (!parseManifestFile(&reader, version)) {
+    printError("VersionSet: parseManifestFile error");
+    delete manifestFile;
+    delete version;
+    return false;
+  }
+
+  finalize(version); 
+  appendVersion(version);
+  delete manifestFile;
+  delete version;
+  return true;
 }
 
 }

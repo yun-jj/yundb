@@ -114,6 +114,10 @@ class VersionSet
 
   void addLiveFiles(std::set<uint64_t>& liveFiles) const;
 
+  // Resume the version from CURRENT file pointed MANIFEST.
+  // Merge all the version edits to the one version and set it as current version.
+  bool resume();
+
   // Return current version
   Version* current() {return _cur;}
 
@@ -132,6 +136,8 @@ class VersionSet
   void appendVersion(Version* version);
 
   void saveSnapshot(log::Writer* log);
+
+  bool parseManifestFile(log:: Reader* reader, Version *version);
 
   class Builder;
   friend class Version;
