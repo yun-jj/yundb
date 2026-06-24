@@ -43,14 +43,15 @@ void Writer::appendRecord(const Slice& record)
     bool end = (write_size == fragment_size);
     RecordType type;
     
-    if (begin && end)
+    if (begin && end) {
       type = FullType;
-    else if (begin)
+    } else if (begin) {
       type = FirstType;
-    else if (end)
+    } else if (end) {
       type = LastType;
-    else
+    } else {
       type = MiddleType;
+    }
     
     emitPhysicalRecord(data, type, fragment_size);
 

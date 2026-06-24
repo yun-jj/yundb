@@ -172,7 +172,8 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
   {
     if (_readBuf.size() < recordHeadSize)
     {
-      if (!_eof) {
+      if (!_eof)
+      {
         // Try to read a new block
         _readBuf.clear();
         bool success = _file->read(&_readBuf, _data, recordBlockSize);
@@ -187,7 +188,9 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
           _eof = true;
         }
         continue;
-      } else {
+      }
+      else
+      {
         // Note that if buffer_ is non-empty, we have a truncated header at the
         // end of the file, which can be caused by the writer crashing in the
         // middle of writing the header. Instead of considering this an error,
@@ -207,16 +210,14 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
     if (recordHeadSize + length > _readBuf.size())
     {
       _readBuf.clear();
-      if (!_eof)
-      {
+      if (!_eof) {
         printError("log::Reader: bad record length");
         return BadRecord;
       }
       return Eof;
     }
 
-    if (type == ZeroType && length == 0)
-    {
+    if (type == ZeroType && length == 0) {
       _readBuf.clear();
       return BadRecord;
     }
@@ -238,8 +239,7 @@ unsigned int Reader::readPhysicalRecord(Slice* result)
 
     // Skip physical record that started before initial_offset_
     if (_endOfBufferOffset - _readBuf.size() - recordHeadSize - length <
-        _initialOffset)
-    {
+        _initialOffset) {
       result->clear();
       return BadRecord;
     }

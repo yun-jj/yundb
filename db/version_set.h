@@ -126,7 +126,6 @@ class VersionSet
   inline uint64_t levelTablesBytes(int level) const;
 
  private:
-  
   // Choice level for compaction
   void finalize(Version* version);
 

@@ -219,7 +219,11 @@ void VersionEdit::decode(const Slice& data)
     msg = "invalid tag";
   }
 
-  if (msg != nullptr) printError(msg);
+  if (msg != nullptr) {
+    printError(msg);
+  } else {
+    return true;
+  }
 }
 
 };
