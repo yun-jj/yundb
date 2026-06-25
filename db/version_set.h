@@ -1,6 +1,5 @@
 #ifndef YUNDB_DB_VERSION_SET_H
 #define YUNDB_DB_VERSION_SET_H
-// Header guard standardized to YUNDB_DB_VERSION_SET_H
 
 #include "dbformat.h"
 #include "version_edit.h"
